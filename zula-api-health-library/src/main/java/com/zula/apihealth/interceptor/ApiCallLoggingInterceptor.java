@@ -36,7 +36,7 @@ public class ApiCallLoggingInterceptor implements ClientHttpRequestInterceptor {
         String respHeaders = null;
         String respBody = null;
         String errorMessage = null;
-        int durationMs;
+        int durationMs = 0;
 
         try {
             ClientHttpResponse response = execution.execute(request, body);
