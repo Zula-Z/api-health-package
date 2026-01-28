@@ -17,9 +17,10 @@ public class ApiHealthRepository {
     public ApiHealthRepository(Jdbi jdbi, DatabaseManager databaseManager, ApiHealthProperties properties) {
         this.jdbi = jdbi;
         this.properties = properties;
-        this.schema = properties.getSchemaName() != null && !properties.getSchemaName().isBlank()
+        String raw = properties.getSchemaName() != null && !properties.getSchemaName().isBlank()
                 ? properties.getSchemaName()
                 : databaseManager.generateSchemaName();
+        this.schema = com.zula.apihealth.config.ApiHealthSchemaInitializer.sanitize(raw);
     }
 
     public void registerEndpointIfAbsent(String name, String path, String method, String description) {

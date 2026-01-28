@@ -70,9 +70,16 @@ public class ApiHealthSchemaInitializer implements InitializingBean {
     }
 
     public String resolveSchema() {
-        if (properties.getSchemaName() != null && !properties.getSchemaName().isBlank()) {
-            return properties.getSchemaName();
-        }
-        return databaseManager.generateSchemaName();
+        String raw = (properties.getSchemaName() != null && !properties.getSchemaName().isBlank())
+                ? properties.getSchemaName()
+                : databaseManager.generateSchemaName();
+        return sanitize(raw);
+    }
+
+    /**
+     * Replace characters invalid for PostgreSQL identifiers with underscores.
+     */
+    public static String sanitize(String schema) {
+        return schema == null ? "public" : schema.replaceAll("[^a-zA-Z0-9_]", "_");
     }
 }
