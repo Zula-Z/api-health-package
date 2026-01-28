@@ -1,6 +1,7 @@
 package com.zula.apihealth.repository;
 
 import com.zula.apihealth.config.ApiHealthProperties;
+import com.zula.apihealth.model.ApiCallLogEntry;
 import com.zula.apihealth.model.ApiEndpointView;
 import com.zula.apihealth.model.ApiLogView;
 import com.zula.database.core.DatabaseManager;
@@ -132,6 +133,27 @@ public class ApiHealthRepository {
                 .bind("limit", limit)
                 .map((rs, ctx) -> mapLog(rs))
                 .list());
+    }
+
+    public void insertLog(ApiCallLogEntry entry) {
+        String sql = "INSERT INTO " + schema + ".api_call_logs " +
+                "(id, \"timestamp\", url, http_method, request_headers, request_body, response_headers, response_body, http_status, duration_ms, trace_id, success, error_message) " +
+                "VALUES (:id, :timestamp, :url, :method, :reqHeaders, :reqBody, :resHeaders, :resBody, :status, :duration, :traceId, :success, :error)";
+        jdbi.useHandle(h -> h.createUpdate(sql)
+                .bind("id", entry.getId())
+                .bind("timestamp", entry.getTimestamp())
+                .bind("url", entry.getUrl())
+                .bind("method", entry.getHttpMethod())
+                .bind("reqHeaders", entry.getRequestHeaders())
+                .bind("reqBody", entry.getRequestBody())
+                .bind("resHeaders", entry.getResponseHeaders())
+                .bind("resBody", entry.getResponseBody())
+                .bind("status", entry.getHttpStatus())
+                .bind("duration", entry.getDurationMs())
+                .bind("traceId", entry.getTraceId())
+                .bind("success", entry.getSuccess())
+                .bind("error", entry.getErrorMessage())
+                .execute());
     }
 
     private ApiLogView mapLog(java.sql.ResultSet rs) throws java.sql.SQLException {

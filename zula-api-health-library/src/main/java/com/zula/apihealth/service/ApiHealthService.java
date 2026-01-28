@@ -1,6 +1,7 @@
 package com.zula.apihealth.service;
 
 import com.zula.apihealth.config.ApiHealthProperties;
+import com.zula.apihealth.model.ApiCallLogEntry;
 import com.zula.apihealth.model.ApiEndpointView;
 import com.zula.apihealth.model.ApiLogView;
 import com.zula.apihealth.repository.ApiHealthRepository;
@@ -41,5 +42,9 @@ public class ApiHealthService {
 
     public void registerEndpoint(String name, String path, String method, String description) {
         repository.registerEndpointIfAbsent(name, path, method, description);
+    }
+
+    public void logCall(ApiCallLogEntry entry) {
+        repository.insertLog(entry);
     }
 }

@@ -8,13 +8,13 @@ import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.core.MethodIntrospector;
 import org.springframework.core.annotation.AnnotatedElementUtils;
-import org.springframework.web.bind.annotation.RestController;
 
 import java.lang.reflect.Method;
 import java.util.Map;
 
 /**
- * Scans beans for @TrackApiEndpoint and registers them into the registry table.
+ * Scans ALL beans for @TrackApiEndpoint and registers them into the registry table.
+ * This lets you annotate service/client classes, not only controllers.
  */
 public class ApiEndpointScanner implements BeanPostProcessor {
     private static final Logger log = LoggerFactory.getLogger(ApiEndpointScanner.class);
@@ -28,15 +28,16 @@ public class ApiEndpointScanner implements BeanPostProcessor {
     @Override
     public Object postProcessAfterInitialization(Object bean, String beanName) throws BeansException {
         Class<?> targetClass = bean.getClass();
-        if (!AnnotatedElementUtils.hasAnnotation(targetClass, RestController.class)) {
-            return bean;
-        }
 
         Map<Method, TrackApiEndpoint> annotated = MethodIntrospector.selectMethods(targetClass,
                 (MethodIntrospector.MetadataLookup<TrackApiEndpoint>) method ->
                         AnnotatedElementUtils.findMergedAnnotation(method, TrackApiEndpoint.class));
 
         annotated.forEach((method, ann) -> {
+            if (ann.path() == null || ann.path().isBlank()) {
+                log.warn("Skipping @TrackApiEndpoint with blank path on {}#{}", beanName, method.getName());
+                return;
+            }
             repository.registerEndpointIfAbsent(
                     ann.name(),
                     ann.path(),
