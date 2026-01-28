@@ -21,7 +21,7 @@ public class ApiCallLogController {
     }
 
     @GetMapping("/recent")
-    public List<ApiLogView> getRecent(@RequestParam(defaultValue = "50") int limit) {
+    public List<ApiLogView> getRecent(@RequestParam(name = "limit", defaultValue = "50") int limit) {
         return service.recentLogs(limit);
     }
 
@@ -32,7 +32,7 @@ public class ApiCallLogController {
     }
 
     @GetMapping("/slow")
-    public List<ApiLogView> getSlow(@RequestParam(defaultValue = "1000") int thresholdMs) {
+    public List<ApiLogView> getSlow(@RequestParam(name = "thresholdMs", defaultValue = "1000") int thresholdMs) {
         return service.logsByEndpoint("", 1000).stream().filter(l -> l.getDurationMs() != null && l.getDurationMs() > thresholdMs).toList();
     }
 
@@ -42,7 +42,7 @@ public class ApiCallLogController {
     }
 
     @GetMapping("/stats/avg-duration")
-    public Double getAvgDuration(@RequestParam String urlPattern) {
+    public Double getAvgDuration(@RequestParam(name = "urlPattern") String urlPattern) {
         return service.logsByEndpoint(urlPattern, 1000).stream()
                 .mapToInt(l -> l.getDurationMs() == null ? 0 : l.getDurationMs())
                 .average()
