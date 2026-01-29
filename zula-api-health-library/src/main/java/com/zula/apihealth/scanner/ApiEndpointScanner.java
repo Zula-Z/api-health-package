@@ -8,6 +8,7 @@ import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.core.MethodIntrospector;
 import org.springframework.core.annotation.AnnotatedElementUtils;
+import org.springframework.core.env.Environment;
 
 import java.lang.reflect.Method;
 import java.util.Map;
@@ -20,9 +21,11 @@ public class ApiEndpointScanner implements BeanPostProcessor {
     private static final Logger log = LoggerFactory.getLogger(ApiEndpointScanner.class);
 
     private final ApiHealthRepository repository;
+    private final Environment environment;
 
-    public ApiEndpointScanner(ApiHealthRepository repository) {
+    public ApiEndpointScanner(ApiHealthRepository repository, Environment environment) {
         this.repository = repository;
+        this.environment = environment;
     }
 
     @Override
@@ -34,17 +37,22 @@ public class ApiEndpointScanner implements BeanPostProcessor {
                         AnnotatedElementUtils.findMergedAnnotation(method, TrackApiEndpoint.class));
 
         annotated.forEach((method, ann) -> {
-            if (ann.path() == null || ann.path().isBlank()) {
+            String rawPath = ann.path();
+            if (rawPath == null || rawPath.isBlank()) {
                 log.warn("Skipping @TrackApiEndpoint with blank path on {}#{}", beanName, method.getName());
                 return;
             }
+            String resolvedPath = environment != null
+                    ? environment.resolvePlaceholders(rawPath)
+                    : rawPath;
+
             repository.registerEndpointIfAbsent(
                     ann.name(),
-                    ann.path(),
+                    resolvedPath,
                     ann.method(),
                     ann.description()
             );
-            log.info("Registered tracked API endpoint {} {} ({})", ann.method(), ann.path(), beanName + "#" + method.getName());
+            log.info("Registered tracked API endpoint {} {} ({})", ann.method(), resolvedPath, beanName + "#" + method.getName());
         });
 
         return bean;
