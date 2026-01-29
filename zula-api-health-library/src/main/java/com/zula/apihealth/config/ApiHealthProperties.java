@@ -5,7 +5,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "zula.apihealth")
 public class ApiHealthProperties {
     /**
-     * Fully qualified schema to use for tables. Defaults to the service schema from DatabaseManager.
+     * Schema / database name to use for tables. Defaults to 'api_health' if unset.
      */
     private String schemaName;
 

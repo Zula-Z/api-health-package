@@ -1,41 +1,39 @@
 package com.zula.apihealth.config;
 
-import com.zula.apihealth.controller.ApiHealthController;
 import com.zula.apihealth.controller.ApiCallLogController;
+import com.zula.apihealth.controller.ApiHealthController;
 import com.zula.apihealth.interceptor.ApiCallLoggingInterceptor;
 import com.zula.apihealth.repository.ApiHealthRepository;
 import com.zula.apihealth.scanner.ApiEndpointScanner;
 import com.zula.apihealth.service.ApiHealthService;
-import com.zula.database.core.DatabaseManager;
-import org.jdbi.v3.core.Jdbi;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import org.springframework.context.annotation.Bean;
 import org.springframework.boot.web.client.RestTemplateCustomizer;
-import org.springframework.core.task.TaskExecutor;
-import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import org.springframework.context.annotation.Bean;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.web.client.RestTemplate;
+
+import javax.sql.DataSource;
 
 @AutoConfiguration
 @EnableConfigurationProperties(ApiHealthProperties.class)
-@ConditionalOnClass({Jdbi.class, DatabaseManager.class})
+@ConditionalOnClass({JdbcTemplate.class, RestTemplate.class})
 public class ApiHealthAutoConfig {
 
     @Bean
     @ConditionalOnMissingBean
-    public ApiHealthSchemaInitializer apiHealthSchemaInitializer(Jdbi jdbi,
-                                                                 DatabaseManager databaseManager,
+    public ApiHealthSchemaInitializer apiHealthSchemaInitializer(JdbcTemplate jdbcTemplate,
                                                                  ApiHealthProperties properties) {
-        return new ApiHealthSchemaInitializer(jdbi, databaseManager, properties);
+        return new ApiHealthSchemaInitializer(jdbcTemplate, properties);
     }
 
     @Bean
     @ConditionalOnMissingBean
-    public ApiHealthRepository apiHealthRepository(Jdbi jdbi,
-                                                   DatabaseManager databaseManager,
+    public ApiHealthRepository apiHealthRepository(JdbcTemplate jdbcTemplate,
                                                    ApiHealthProperties properties) {
-        return new ApiHealthRepository(jdbi, databaseManager, properties);
+        return new ApiHealthRepository(jdbcTemplate, properties);
     }
 
     @Bean
@@ -53,6 +51,12 @@ public class ApiHealthAutoConfig {
 
     @Bean
     @ConditionalOnMissingBean
+    public ApiCallLogController apiCallLogController(ApiHealthService service) {
+        return new ApiCallLogController(service);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
     public ApiEndpointScanner apiEndpointScanner(ApiHealthRepository repository) {
         return new ApiEndpointScanner(repository);
     }
@@ -64,26 +68,8 @@ public class ApiHealthAutoConfig {
     }
 
     @Bean
-    @ConditionalOnMissingBean(name = "apiHealthTaskExecutor")
-    public TaskExecutor apiHealthTaskExecutor() {
-        ThreadPoolTaskExecutor exec = new ThreadPoolTaskExecutor();
-        exec.setCorePoolSize(4);
-        exec.setMaxPoolSize(8);
-        exec.setQueueCapacity(200);
-        exec.setThreadNamePrefix("api-health-");
-        exec.initialize();
-        return exec;
-    }
-
-    @Bean
     @ConditionalOnMissingBean(name = "apiHealthRestTemplateCustomizer")
     public RestTemplateCustomizer apiHealthRestTemplateCustomizer(ApiCallLoggingInterceptor interceptor) {
         return restTemplate -> restTemplate.getInterceptors().add(interceptor);
-    }
-
-    @Bean
-    @ConditionalOnMissingBean
-    public ApiCallLogController apiCallLogController(ApiHealthService service) {
-        return new ApiCallLogController(service);
     }
 }
