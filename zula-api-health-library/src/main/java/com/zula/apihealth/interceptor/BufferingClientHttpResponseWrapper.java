@@ -1,7 +1,7 @@
 package com.zula.apihealth.interceptor;
 
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatusCode;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.util.StreamUtils;
 
@@ -20,7 +20,7 @@ public class BufferingClientHttpResponseWrapper implements ClientHttpResponse {
     }
 
     @Override
-    public HttpStatusCode getStatusCode() throws IOException {
+    public HttpStatus getStatusCode() throws IOException {
         return response.getStatusCode();
     }
 
