@@ -27,8 +27,9 @@ public class PingScheduler {
         this.service = service;
         this.restTemplate = restTemplate;
     }
-
-    // Run every 30 seconds; internal logic respects per-endpoint interval
+    /**
+     *  Run every 30 seconds; internal logic respects per-endpoint interval
+    */
     @Scheduled(fixedDelay = 30_000)
     public void ping() {
         List<ApiEndpointView> targets = service.endpointsNeedingPing();

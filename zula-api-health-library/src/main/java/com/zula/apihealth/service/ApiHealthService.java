@@ -21,9 +21,10 @@ public class ApiHealthService {
         this.properties = properties;
     }
 
-    /** Return all endpoints with aggregated stats; optional filter by path or name. */
-    public List<ApiEndpointView> listEndpoints(String filter) {
-        return repository.listEndpointsWithStats(filter);
+    /** Return all endpoints with aggregated stats; optional filter/date/sort/status and active switch. */
+    public List<ApiEndpointView> listEndpoints(String filter, String from, String to, String sort, boolean desc,
+                                               List<Integer> statuses, Boolean onlyActive) {
+        return repository.listEndpointsWithStats(filter, from, to, sort, desc, onlyActive, statuses);
     }
 
     /** Fetch a single endpoint with stats by id. */
@@ -43,9 +44,10 @@ public class ApiHealthService {
         return repository.logsByEndpoint(url, l);
     }
 
-    /** Monitored endpoints only, optional filter. */
-    public List<ApiEndpointView> listMonitors(String filter) {
-        return repository.listMonitors(filter);
+    /** Health view for all endpoints (both actively monitored and passive). */
+    public List<ApiEndpointView> listHealth(String filter, String from, String to, String sort, boolean desc,
+                                            List<Integer> statuses, Boolean onlyActive) {
+        return repository.listEndpointsWithStats(filter, from, to, sort, desc, onlyActive, statuses);
     }
 
     /** Recent logs associated (by URL prefix) with a specific endpoint id. */

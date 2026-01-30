@@ -3,6 +3,7 @@ package com.zula.apihealth.interceptor;
 import com.zula.apihealth.model.ApiCallLogEntry;
 import com.zula.apihealth.service.ApiHealthService;
 import com.zula.apihealth.interceptor.BufferingClientHttpResponseWrapper;
+import com.zula.apihealth.interceptor.PingContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpRequest;
@@ -60,6 +61,10 @@ public class ApiCallLoggingInterceptor implements ClientHttpRequestInterceptor {
             errorMessage = ex.getMessage();
             throw ex;
         } finally {
+            // Skip logging for internal ping requests
+            if (PingContext.isPing()) {
+                PingContext.clear();
+            } else {
             ApiCallLogEntry entry = new ApiCallLogEntry();
             entry.setId(UUID.randomUUID());
             entry.setTimestamp(start);
@@ -75,6 +80,7 @@ public class ApiCallLoggingInterceptor implements ClientHttpRequestInterceptor {
             entry.setSuccess(success);
             entry.setErrorMessage(errorMessage);
             apiHealthService.logCall(entry);
+            }
         }
     }
 

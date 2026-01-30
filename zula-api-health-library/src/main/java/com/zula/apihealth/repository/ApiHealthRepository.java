@@ -13,6 +13,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -56,25 +57,31 @@ public class ApiHealthRepository {
             jdbcTemplate.update(sql, name, path, method, description, pingIntervalSec, activeMonitor);
             return;
         } catch (org.springframework.jdbc.BadSqlGrammarException ex) {
-            // Likely missing new monitor columns; attempt to add them and retry once.
             addMonitorColumns();
             jdbcTemplate.update(sql, name, path, method, description, pingIntervalSec, activeMonitor);
             return;
         } catch (org.springframework.dao.DataAccessException ex) {
-            // Fallback for table/schema missing: create everything and retry once
             if (isMissingTable(ex)) {
                 ensureTables();
                 jdbcTemplate.update(sql, name, path, method, description, pingIntervalSec, activeMonitor);
             } else {
-                // Try once after adding columns too
                 addMonitorColumns();
                 jdbcTemplate.update(sql, name, path, method, description, pingIntervalSec, activeMonitor);
             }
         }
     }
 
-    /** Return all endpoints with aggregated call stats, optional path/name filter. */
-    public List<ApiEndpointView> listEndpointsWithStats(String filter) {
+    /**
+     * Unified endpoint query with filter/date/sort/status and optional active-only switch.
+     * @param filter substring on path/name
+     * @param from iso datetime inclusive applied to last_check_time and last_called
+     * @param to iso datetime inclusive
+     * @param sort name|path|lastCalled|avgDuration|totalCalls|status|lastCheckTime|pingInterval|active|successCalls|failureCalls
+     * @param desc descending
+     * @param onlyActive null = all, true = active_monitor only, false = inactive only
+     * @param statuses optional list of last_check_status to include
+     */
+    public List<ApiEndpointView> listEndpointsWithStats(String filter, String from, String to, String sort, boolean desc, Boolean onlyActive, List<Integer> statuses) {
         String base = "SELECT r.id, r.name, r.path, r.http_method, r.description, " +
                 "r.ping_interval_sec, r.active_monitor, r.last_check_time, r.last_check_status, r.last_check_success, r.last_check_body, " +
                 "COALESCE(COUNT(l.id),0) AS total_calls, " +
@@ -85,41 +92,13 @@ public class ApiHealthRepository {
                 "FROM " + schema + ".api_endpoint_registry r " +
                 "LEFT JOIN " + schema + ".api_call_logs l ON l.url LIKE CONCAT(r.path, '%') ";
 
-        String where = "";
-        Object[] params = new Object[]{};
-        if (filter != null && !filter.isBlank()) {
-            where = "WHERE r.path LIKE CONCAT('%', ?, '%') OR r.name LIKE CONCAT('%', ?, '%') ";
-            params = new Object[]{filter, filter};
-        }
-        String tail = "GROUP BY r.id, r.name, r.path, r.http_method, r.description ORDER BY r.id";
-        String sql = base + where + tail;
-        return jdbcTemplate.query(sql, params, endpointMapper);
-    }
+        StringBuilder where = new StringBuilder();
+        List<Object> params = new ArrayList<>();
+        appendFilters(where, params, filter, from, to, onlyActive, statuses);
 
-    /** Return only monitored endpoints (active=true) with optional filter. */
-    public List<ApiEndpointView> listMonitors(String filter) {
-        String base = "SELECT r.id, r.name, r.path, r.http_method, r.description, " +
-                "r.ping_interval_sec, r.active_monitor, r.last_check_time, r.last_check_status, r.last_check_success, r.last_check_body, " +
-                "COALESCE(COUNT(l.id),0) AS total_calls, " +
-                "COALESCE(SUM(CASE WHEN l.success THEN 1 ELSE 0 END),0) AS success_calls, " +
-                "COALESCE(SUM(CASE WHEN NOT l.success THEN 1 ELSE 0 END),0) AS failure_calls, " +
-                "COALESCE(AVG(l.duration_ms),0) AS avg_duration_ms, " +
-                "MAX(l.timestamp) AS last_called " +
-                "FROM " + schema + ".api_endpoint_registry r " +
-                "LEFT JOIN " + schema + ".api_call_logs l ON l.url LIKE CONCAT(r.path, '%') " +
-                "WHERE r.active_monitor = TRUE ";
-
-        Object[] params = new Object[]{};
-        if (filter != null && !filter.isBlank()) {
-            base += "AND (r.path LIKE CONCAT('%', ?, '%') OR r.name LIKE CONCAT('%', ?, '%')) ";
-            params = new Object[]{filter, filter};
-        }
-        String tail = "GROUP BY r.id, r.name, r.path, r.http_method, r.description ORDER BY r.id";
-        List<ApiEndpointView> list = jdbcTemplate.query(base + tail, params, endpointMapper);
-        if (log.isDebugEnabled()) {
-            log.debug("listMonitors filter='{}' -> {} rows", filter, list.size());
-        }
-        return list;
+        String order = buildOrder(sort, desc);
+        String sql = base + where + " GROUP BY r.id, r.name, r.path, r.http_method, r.description " + order;
+        return jdbcTemplate.query(sql, params.toArray(), endpointMapper);
     }
 
     /** Fetch one endpoint (with stats) by id. */
@@ -167,7 +146,6 @@ public class ApiHealthRepository {
         String sql = "INSERT INTO " + schema + ".api_call_logs " +
                 "(id, timestamp, url, http_method, request_headers, request_body, response_headers, response_body, http_status, duration_ms, trace_id, success, error_message) " +
                 "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)";
-        // MySQL expects CHAR(36); Postgres accepts native UUID. Send the right shape.
         Object idParam = postgres ? entry.getId() : entry.getId().toString();
         jdbcTemplate.update(sql,
                 idParam,
@@ -234,6 +212,7 @@ public class ApiHealthRepository {
         }
     };
 
+    /** Active monitor endpoints with ping interval >0. */
     public List<ApiEndpointView> endpointsMarkedForPing() {
         String sql = "SELECT r.id, r.name, r.path, r.http_method, r.description, " +
                 "r.ping_interval_sec, r.active_monitor, r.last_check_time, r.last_check_status, r.last_check_success, r.last_check_body, " +
@@ -281,6 +260,72 @@ public class ApiHealthRepository {
         }
     }
 
+    /** Build WHERE clause for filters. */
+    private void appendFilters(StringBuilder where, List<Object> params, String filter, String from, String to, Boolean onlyActive, List<Integer> statuses) {
+        List<String> clauses = new ArrayList<>();
+        if (filter != null && !filter.isBlank()) {
+            clauses.add("(r.path LIKE CONCAT('%', ?, '%') OR r.name LIKE CONCAT('%', ?, '%'))");
+            params.add(filter);
+            params.add(filter);
+        }
+        if (onlyActive != null) {
+            clauses.add("r.active_monitor = ?");
+            params.add(onlyActive);
+        }
+        if (statuses != null && !statuses.isEmpty()) {
+            String placeholders = String.join(",", java.util.Collections.nCopies(statuses.size(), "?"));
+            clauses.add("r.last_check_status IN (" + placeholders + ")");
+            params.addAll(statuses);
+        }
+        if (from != null && !from.isBlank()) {
+            clauses.add("(r.last_check_time >= ? OR l.timestamp >= ?)");
+            OffsetDateTime dt = parse(from);
+            params.add(dt);
+            params.add(dt);
+        }
+        if (to != null && !to.isBlank()) {
+            clauses.add("(r.last_check_time <= ? OR l.timestamp <= ?)");
+            OffsetDateTime dt = parse(to);
+            params.add(dt);
+            params.add(dt);
+        }
+        if (!clauses.isEmpty()) {
+            where.append(" WHERE ").append(String.join(" AND ", clauses)).append(" ");
+        }
+    }
+
+    /** Build ORDER BY clause. */
+    private String buildOrder(String sort, boolean desc) {
+        String col;
+        if (sort == null) {
+            col = "r.id";
+        } else {
+            switch (sort) {
+                case "name": col = "r.name"; break;
+                case "path": col = "r.path"; break;
+                case "lastCalled": col = "last_called"; break;
+                case "avgDuration": col = "avg_duration_ms"; break;
+                case "totalCalls": col = "total_calls"; break;
+                case "status": col = "last_check_status"; break;
+                case "lastCheckTime": col = "r.last_check_time"; break;
+                case "pingInterval": col = "r.ping_interval_sec"; break;
+                case "active": col = "r.active_monitor"; break;
+                case "successCalls": col = "success_calls"; break;
+                case "failureCalls": col = "failure_calls"; break;
+                default: col = "r.id";
+            }
+        }
+        return " ORDER BY " + col + (desc ? " DESC" : " ASC");
+    }
+
+    private OffsetDateTime parse(String s) {
+        try {
+            return OffsetDateTime.parse(s);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     private String insertSql() {
         if (postgres) {
             return "INSERT INTO " + schema + ".api_endpoint_registry " +
@@ -299,25 +344,15 @@ public class ApiHealthRepository {
     }
 
     private void addMonitorColumns() {
-        try {
-            jdbcTemplate.execute("ALTER TABLE " + schema + ".api_endpoint_registry ADD COLUMN IF NOT EXISTS ping_interval_sec INT DEFAULT 0");
-        } catch (Exception ignored) {}
-        try {
-            jdbcTemplate.execute("ALTER TABLE " + schema + ".api_endpoint_registry ADD COLUMN IF NOT EXISTS active_monitor BOOLEAN DEFAULT FALSE");
-        } catch (Exception ignored) {}
+        try { jdbcTemplate.execute("ALTER TABLE " + schema + ".api_endpoint_registry ADD COLUMN IF NOT EXISTS ping_interval_sec INT DEFAULT 0"); } catch (Exception ignored) {}
+        try { jdbcTemplate.execute("ALTER TABLE " + schema + ".api_endpoint_registry ADD COLUMN IF NOT EXISTS active_monitor BOOLEAN DEFAULT FALSE"); } catch (Exception ignored) {}
         try {
             String ts = postgres ? "TIMESTAMP" : "DATETIME";
             jdbcTemplate.execute("ALTER TABLE " + schema + ".api_endpoint_registry ADD COLUMN IF NOT EXISTS last_check_time " + ts + " NULL");
         } catch (Exception ignored) {}
-        try {
-            jdbcTemplate.execute("ALTER TABLE " + schema + ".api_endpoint_registry ADD COLUMN IF NOT EXISTS last_check_status INT NULL");
-        } catch (Exception ignored) {}
-        try {
-            jdbcTemplate.execute("ALTER TABLE " + schema + ".api_endpoint_registry ADD COLUMN IF NOT EXISTS last_check_success BOOLEAN NULL");
-        } catch (Exception ignored) {}
-        try {
-            jdbcTemplate.execute("ALTER TABLE " + schema + ".api_endpoint_registry ADD COLUMN IF NOT EXISTS last_check_body TEXT NULL");
-        } catch (Exception ignored) {}
+        try { jdbcTemplate.execute("ALTER TABLE " + schema + ".api_endpoint_registry ADD COLUMN IF NOT EXISTS last_check_status INT NULL"); } catch (Exception ignored) {}
+        try { jdbcTemplate.execute("ALTER TABLE " + schema + ".api_endpoint_registry ADD COLUMN IF NOT EXISTS last_check_success BOOLEAN NULL"); } catch (Exception ignored) {}
+        try { jdbcTemplate.execute("ALTER TABLE " + schema + ".api_endpoint_registry ADD COLUMN IF NOT EXISTS last_check_body TEXT NULL"); } catch (Exception ignored) {}
     }
 
     private void ensureTables() {
