@@ -1,0 +1,15 @@
+.idea/
+.vscode/
+copilot-generated.*
+.copilot/
+qodo.generated.*
+qodo/
+target/
+*.log
+.DS_Store
+Thumbs.db
+*.swp
+*.tmp
+*.bak
+.mvn/
+.gradle/

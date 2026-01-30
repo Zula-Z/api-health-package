@@ -37,7 +37,8 @@ public class ApiHealthService {
     }
 
     public List<ApiEndpointView> listMonitors(String filter) {
-        return repository.listMonitors(filter);
+        List<ApiEndpointView> list = repository.listMonitors(filter);
+        return list;
     }
 
     public List<ApiLogView> logsForEndpointId(long endpointId, Integer limit) {

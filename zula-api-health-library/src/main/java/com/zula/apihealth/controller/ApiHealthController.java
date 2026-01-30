@@ -3,6 +3,7 @@ package com.zula.apihealth.controller;
 import com.zula.apihealth.model.ApiEndpointView;
 import com.zula.apihealth.model.ApiLogView;
 import com.zula.apihealth.service.ApiHealthService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -10,6 +11,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/health")
+@Slf4j
 public class ApiHealthController {
     private final ApiHealthService service;
 
@@ -52,7 +54,10 @@ public class ApiHealthController {
 
     @GetMapping("/monitoring")
     public List<ApiEndpointView> monitoring(@RequestParam(name = "filter", required = false) String filter) {
-        return service.listMonitors(filter);
+        log.debug("Monitoring endpoint hit with filter={}", filter);
+        List<ApiEndpointView> list = service.listMonitors(filter);
+        log.debug("Monitoring result size={}", list.size());
+        return list;
     }
 
     static class EndpointWithLogs {

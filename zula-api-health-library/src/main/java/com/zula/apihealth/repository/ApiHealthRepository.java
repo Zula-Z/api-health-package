@@ -4,6 +4,8 @@ import com.zula.apihealth.config.ApiHealthProperties;
 import com.zula.apihealth.model.ApiCallLogEntry;
 import com.zula.apihealth.model.ApiEndpointView;
 import com.zula.apihealth.model.ApiLogView;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 
@@ -14,6 +16,7 @@ import java.util.List;
 import java.util.UUID;
 
 public class ApiHealthRepository {
+    private static final Logger log = LoggerFactory.getLogger(ApiHealthRepository.class);
     private final JdbcTemplate jdbcTemplate;
     private final ApiHealthProperties properties;
     private final String schema;
@@ -84,7 +87,11 @@ public class ApiHealthRepository {
             params = new Object[]{filter, filter};
         }
         String tail = "GROUP BY r.id, r.name, r.path, r.http_method, r.description ORDER BY r.id";
-        return jdbcTemplate.query(base + tail, params, endpointMapper);
+        List<ApiEndpointView> list = jdbcTemplate.query(base + tail, params, endpointMapper);
+        if (log.isDebugEnabled()) {
+            log.debug("listMonitors filter='{}' -> {} rows", filter, list.size());
+        }
+        return list;
     }
 
     public ApiEndpointView getEndpointWithStats(long id) {

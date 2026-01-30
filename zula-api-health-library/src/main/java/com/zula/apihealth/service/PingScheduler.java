@@ -31,9 +31,11 @@ public class PingScheduler {
     public void ping() {
         List<ApiEndpointView> targets = service.endpointsNeedingPing();
         if (targets.isEmpty()) {
+            log.debug("PingScheduler: no endpoints eligible for ping right now");
             return;
         }
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        log.debug("PingScheduler: will ping {} endpoint(s)", targets.size());
         for (ApiEndpointView endpoint : targets) {
             try {
                 ResponseEntity<String> resp = restTemplate.getForEntity(endpoint.getPath(), String.class);
