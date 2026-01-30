@@ -36,6 +36,10 @@ public class ApiHealthService {
         return repository.logsByEndpoint(url, l);
     }
 
+    public List<ApiEndpointView> listMonitors(String filter) {
+        return repository.listMonitors(filter);
+    }
+
     public List<ApiLogView> logsForEndpointId(long endpointId, Integer limit) {
         int l = limit != null ? limit : properties.getRecentLimit();
         return repository.logsForEndpointId(endpointId, l);

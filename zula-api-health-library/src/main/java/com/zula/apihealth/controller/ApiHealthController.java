@@ -50,6 +50,11 @@ public class ApiHealthController {
         return service.logsByEndpoint(url, limit);
     }
 
+    @GetMapping("/monitoring")
+    public List<ApiEndpointView> monitoring(@RequestParam(name = "filter", required = false) String filter) {
+        return service.listMonitors(filter);
+    }
+
     static class EndpointWithLogs {
         public ApiEndpointView endpoint;
         public List<ApiLogView> logs;

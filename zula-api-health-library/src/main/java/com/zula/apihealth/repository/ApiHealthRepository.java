@@ -66,6 +66,27 @@ public class ApiHealthRepository {
         return jdbcTemplate.query(sql, params, endpointMapper);
     }
 
+    public List<ApiEndpointView> listMonitors(String filter) {
+        String base = "SELECT r.id, r.name, r.path, r.http_method, r.description, " +
+                "r.ping_interval_sec, r.active_monitor, r.last_check_time, r.last_check_status, r.last_check_success, r.last_check_body, " +
+                "COALESCE(COUNT(l.id),0) AS total_calls, " +
+                "COALESCE(SUM(CASE WHEN l.success THEN 1 ELSE 0 END),0) AS success_calls, " +
+                "COALESCE(SUM(CASE WHEN NOT l.success THEN 1 ELSE 0 END),0) AS failure_calls, " +
+                "COALESCE(AVG(l.duration_ms),0) AS avg_duration_ms, " +
+                "MAX(l.timestamp) AS last_called " +
+                "FROM " + schema + ".api_endpoint_registry r " +
+                "LEFT JOIN " + schema + ".api_call_logs l ON l.url LIKE CONCAT(r.path, '%') " +
+                "WHERE r.active_monitor = TRUE ";
+
+        Object[] params = new Object[]{};
+        if (filter != null && !filter.isBlank()) {
+            base += "AND (r.path LIKE CONCAT('%', ?, '%') OR r.name LIKE CONCAT('%', ?, '%')) ";
+            params = new Object[]{filter, filter};
+        }
+        String tail = "GROUP BY r.id, r.name, r.path, r.http_method, r.description ORDER BY r.id";
+        return jdbcTemplate.query(base + tail, params, endpointMapper);
+    }
+
     public ApiEndpointView getEndpointWithStats(long id) {
         String sql = "SELECT r.id, r.name, r.path, r.http_method, r.description, " +
                 "r.ping_interval_sec, r.active_monitor, r.last_check_time, r.last_check_status, r.last_check_success, r.last_check_body, " +
