@@ -7,6 +7,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
  * Ensures the API health tables exist at startup (JDBC-based, Boot 2.7 compatible).
+ * Respects the auto-create flag; safe for MySQL and Postgres.
  */
 public class ApiHealthSchemaInitializer implements InitializingBean {
     private static final Logger log = LoggerFactory.getLogger(ApiHealthSchemaInitializer.class);

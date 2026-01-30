@@ -10,6 +10,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 
+/**
+ * Simple buffering wrapper so response bodies can be read multiple times.
+ */
 public class BufferingClientHttpResponseWrapper implements ClientHttpResponse {
     private final ClientHttpResponse response;
     private final byte[] body;

@@ -11,11 +11,14 @@ import org.springframework.jdbc.core.RowMapper;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.SQLSyntaxErrorException;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * Low-level JDBC access for the API health tables.
+ * Handles creation/evolution of tables and shields callers from SQL dialect differences.
+ */
 public class ApiHealthRepository {
     private static final Logger log = LoggerFactory.getLogger(ApiHealthRepository.class);
     private final JdbcTemplate jdbcTemplate;
@@ -24,6 +27,9 @@ public class ApiHealthRepository {
     private final boolean postgres;
     private volatile boolean tablesEnsured = false;
 
+    /**
+     * Build the repository; optionally auto-create tables if configured.
+     */
     public ApiHealthRepository(JdbcTemplate jdbcTemplate, ApiHealthProperties properties) {
         this.jdbcTemplate = jdbcTemplate;
         this.properties = properties;
@@ -37,6 +43,9 @@ public class ApiHealthRepository {
         }
     }
 
+    /**
+     * Upsert an endpoint definition; if tables/columns are missing they are created and the insert retried.
+     */
     public void registerEndpointIfAbsent(String name, String path, String method, String description,
                                          Integer pingIntervalSec, Boolean activeMonitor) {
         String sql = insertSql();
@@ -61,6 +70,7 @@ public class ApiHealthRepository {
         }
     }
 
+    /** Return all endpoints with aggregated call stats, optional path/name filter. */
     public List<ApiEndpointView> listEndpointsWithStats(String filter) {
         String base = "SELECT r.id, r.name, r.path, r.http_method, r.description, " +
                 "r.ping_interval_sec, r.active_monitor, r.last_check_time, r.last_check_status, r.last_check_success, r.last_check_body, " +
@@ -83,6 +93,7 @@ public class ApiHealthRepository {
         return jdbcTemplate.query(sql, params, endpointMapper);
     }
 
+    /** Return only monitored endpoints (active=true) with optional filter. */
     public List<ApiEndpointView> listMonitors(String filter) {
         String base = "SELECT r.id, r.name, r.path, r.http_method, r.description, " +
                 "r.ping_interval_sec, r.active_monitor, r.last_check_time, r.last_check_status, r.last_check_success, r.last_check_body, " +
@@ -108,6 +119,7 @@ public class ApiHealthRepository {
         return list;
     }
 
+    /** Fetch one endpoint (with stats) by id. */
     public ApiEndpointView getEndpointWithStats(long id) {
         String sql = "SELECT r.id, r.name, r.path, r.http_method, r.description, " +
                 "r.ping_interval_sec, r.active_monitor, r.last_check_time, r.last_check_status, r.last_check_success, r.last_check_body, " +
@@ -124,18 +136,21 @@ public class ApiHealthRepository {
         return list.isEmpty() ? null : list.get(0);
     }
 
+    /** Recent logs capped by limit. */
     public List<ApiLogView> recentLogs(int limit) {
         String sql = "SELECT id, timestamp, url, http_method, http_status, duration_ms, success, trace_id " +
                 "FROM " + schema + ".api_call_logs ORDER BY timestamp DESC LIMIT ?";
         return jdbcTemplate.query(sql, logMapper, limit);
     }
 
+    /** Logs filtered by URL prefix. */
     public List<ApiLogView> logsByEndpoint(String endpointLike, int limit) {
         String sql = "SELECT id, timestamp, url, http_method, http_status, duration_ms, success, trace_id " +
                 "FROM " + schema + ".api_call_logs WHERE url LIKE CONCAT(?, '%') ORDER BY timestamp DESC LIMIT ?";
         return jdbcTemplate.query(sql, logMapper, endpointLike, limit);
     }
 
+    /** Logs tied to an endpoint by matching URL prefix via endpoint id. */
     public List<ApiLogView> logsForEndpointId(long endpointId, int limit) {
         String sql = "SELECT l.id, l.timestamp, l.url, l.http_method, l.http_status, l.duration_ms, l.success, l.trace_id " +
                 "FROM " + schema + ".api_call_logs l " +
@@ -144,6 +159,7 @@ public class ApiHealthRepository {
         return jdbcTemplate.query(sql, logMapper, endpointId, limit);
     }
 
+    /** Persist a single API call log entry. */
     public void insertLog(ApiCallLogEntry entry) {
         String sql = "INSERT INTO " + schema + ".api_call_logs " +
                 "(id, timestamp, url, http_method, request_headers, request_body, response_headers, response_body, http_status, duration_ms, trace_id, success, error_message) " +
@@ -210,7 +226,21 @@ public class ApiHealthRepository {
                 "0 AS total_calls, 0 AS success_calls, 0 AS failure_calls, 0 AS avg_duration_ms, r.last_check_time AS last_called " +
                 "FROM " + schema + ".api_endpoint_registry r " +
                 "WHERE r.active_monitor = TRUE AND r.ping_interval_sec > 0";
-        return jdbcTemplate.query(sql, endpointMapper);
+        try {
+            List<ApiEndpointView> list = jdbcTemplate.query(sql, endpointMapper);
+            if (log.isDebugEnabled()) {
+                log.debug("endpointsMarkedForPing -> {} rows", list.size());
+            }
+            return list;
+        } catch (org.springframework.jdbc.BadSqlGrammarException ex) {
+            ensureTables();
+            addMonitorColumns();
+            List<ApiEndpointView> list = jdbcTemplate.query(sql, endpointMapper);
+            if (log.isDebugEnabled()) {
+                log.debug("endpointsMarkedForPing after ensureTables -> {} rows", list.size());
+            }
+            return list;
+        }
     }
 
     public void updateMonitorStatus(long id, int status, boolean success, String body, OffsetDateTime checkedAt) {

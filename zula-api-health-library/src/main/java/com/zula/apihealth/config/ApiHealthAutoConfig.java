@@ -23,6 +23,14 @@ import org.springframework.boot.web.client.RestTemplateBuilder;
 
 import javax.sql.DataSource;
 
+/**
+ * Auto-configures the API health components:
+ *  - schema init and repository
+ *  - service + controllers
+ *  - endpoint scanner/rescan
+ *  - RestTemplate interceptor/customizer
+ *  - ping scheduler (if scheduling is available)
+ */
 @AutoConfiguration
 @EnableConfigurationProperties(ApiHealthProperties.class)
 @ConditionalOnClass({JdbcTemplate.class, RestTemplate.class})
@@ -30,6 +38,7 @@ public class ApiHealthAutoConfig {
 
     @Bean
     @ConditionalOnMissingBean
+    /** Ensure schema/tables exist (if auto-create is enabled). */
     public ApiHealthSchemaInitializer apiHealthSchemaInitializer(JdbcTemplate jdbcTemplate,
                                                                  ApiHealthProperties properties) {
         return new ApiHealthSchemaInitializer(jdbcTemplate, properties);
@@ -37,6 +46,7 @@ public class ApiHealthAutoConfig {
 
     @Bean
     @ConditionalOnMissingBean
+    /** Repository for registry/log persistence with auto-creation fallback. */
     public ApiHealthRepository apiHealthRepository(JdbcTemplate jdbcTemplate,
                                                    ApiHealthProperties properties) {
         return new ApiHealthRepository(jdbcTemplate, properties);
@@ -44,6 +54,7 @@ public class ApiHealthAutoConfig {
 
     @Bean
     @ConditionalOnMissingBean
+    /** Service layer orchestrating queries/persistence. */
     public ApiHealthService apiHealthService(ApiHealthRepository repository,
                                              ApiHealthProperties properties) {
         return new ApiHealthService(repository, properties);
@@ -51,30 +62,35 @@ public class ApiHealthAutoConfig {
 
     @Bean
     @ConditionalOnMissingBean
+    /** REST API for endpoints + monitoring. */
     public ApiHealthController apiHealthController(ApiHealthService service) {
         return new ApiHealthController(service);
     }
 
     @Bean
     @ConditionalOnMissingBean
+    /** REST API for log retrieval. */
     public ApiCallLogController apiCallLogController(ApiHealthService service) {
         return new ApiCallLogController(service);
     }
 
     @Bean
     @ConditionalOnMissingBean
+    /** Bean post-processor that registers @TrackApiEndpoint methods. */
     public ApiEndpointScanner apiEndpointScanner(ApiHealthRepository repository, Environment environment) {
         return new ApiEndpointScanner(repository, environment);
     }
 
     @Bean
     @ConditionalOnMissingBean
+    /** Safety net to rescan after context refresh. */
     public ApiEndpointRescan apiEndpointRescan(ApiEndpointScanner scanner, Environment environment) {
         return new ApiEndpointRescan(scanner, environment);
     }
 
     @Bean
     @ConditionalOnMissingBean
+    /** Interceptor to capture outbound calls. */
     public ApiCallLoggingInterceptor apiCallLoggingInterceptor(ApiHealthService service) {
         return new ApiCallLoggingInterceptor(service);
     }

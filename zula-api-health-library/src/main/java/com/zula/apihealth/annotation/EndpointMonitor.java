@@ -8,6 +8,9 @@ import java.lang.annotation.Target;
 /**
  * Optional annotation to enable active health pinging for an external API endpoint.
  * Apply alongside {@link TrackApiEndpoint} on the same method.
+ *
+ * - active=true flags it for PingScheduler
+ * - pingIntervalSeconds sets how often (in seconds) to allow a ping
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.METHOD})

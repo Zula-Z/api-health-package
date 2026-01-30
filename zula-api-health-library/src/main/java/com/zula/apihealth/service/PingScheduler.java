@@ -14,6 +14,7 @@ import java.util.List;
 
 /**
  * Active pinging of external endpoints marked with {@code @EndpointMonitor(active=true)}.
+ * Runs on a fixed delay and respects per-endpoint intervals to avoid hammering targets.
  */
 public class PingScheduler {
     private static final Logger log = LoggerFactory.getLogger(PingScheduler.class);

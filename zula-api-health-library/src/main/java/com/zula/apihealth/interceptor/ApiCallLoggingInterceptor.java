@@ -15,6 +15,10 @@ import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
+/**
+ * Intercepts outbound RestTemplate calls, captures request/response, and hands off to persistence.
+ * Keeps network latency on the main thread minimal; DB write is delegated to the async service.
+ */
 public class ApiCallLoggingInterceptor implements ClientHttpRequestInterceptor {
     private static final Logger log = LoggerFactory.getLogger(ApiCallLoggingInterceptor.class);
     private final ApiHealthService apiHealthService;
@@ -24,6 +28,7 @@ public class ApiCallLoggingInterceptor implements ClientHttpRequestInterceptor {
         this.apiHealthService = apiHealthService;
     }
 
+    /** Capture and log a single outbound HTTP exchange. */
     @Override
     public ClientHttpResponse intercept(HttpRequest request, byte[] body, ClientHttpRequestExecution execution) throws IOException {
         OffsetDateTime start = OffsetDateTime.now();

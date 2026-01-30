@@ -2,6 +2,10 @@ package com.zula.apihealth.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+/**
+ * Externalized configuration for the API health module.
+ * Prefix: zula.apihealth
+ */
 @ConfigurationProperties(prefix = "zula.apihealth")
 public class ApiHealthProperties {
     /**
