@@ -32,6 +32,9 @@ public class ApiHealthRepository {
                 : "api_health";
         this.schema = com.zula.apihealth.config.ApiHealthSchemaInitializer.sanitize(raw);
         this.postgres = detectPostgres(jdbcTemplate);
+        if (properties.isAutoCreateTables()) {
+            ensureTables();
+        }
     }
 
     public void registerEndpointIfAbsent(String name, String path, String method, String description,
