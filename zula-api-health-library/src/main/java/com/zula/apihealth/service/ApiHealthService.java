@@ -50,8 +50,16 @@ public class ApiHealthService {
     }
 
     public List<ApiEndpointView> endpointsNeedingPing() {
+        List<ApiEndpointView> all = repository.endpointsMarkedForPing();
         long now = java.time.Instant.now().getEpochSecond();
-        return repository.endpointsNeedingPing(now);
+        return all.stream()
+                .filter(e -> e.getPingIntervalSec() != null && e.getPingIntervalSec() > 0)
+                .filter(e -> {
+                    if (e.getLastCheckTime() == null) return true;
+                    long last = e.getLastCheckTime().toEpochSecond();
+                    return last + e.getPingIntervalSec() <= now;
+                })
+                .toList();
     }
 
     public void updateMonitorStatus(long id, int status, boolean success, String body, OffsetDateTime checkedAt) {

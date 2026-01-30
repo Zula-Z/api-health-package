@@ -17,6 +17,7 @@ public class ApiHealthRepository {
     private final JdbcTemplate jdbcTemplate;
     private final ApiHealthProperties properties;
     private final String schema;
+    private final boolean postgres;
 
     public ApiHealthRepository(JdbcTemplate jdbcTemplate, ApiHealthProperties properties) {
         this.jdbcTemplate = jdbcTemplate;
@@ -25,16 +26,26 @@ public class ApiHealthRepository {
                 ? properties.getSchemaName()
                 : "api_health";
         this.schema = com.zula.apihealth.config.ApiHealthSchemaInitializer.sanitize(raw);
+        this.postgres = detectPostgres(jdbcTemplate);
     }
 
     public void registerEndpointIfAbsent(String name, String path, String method, String description,
                                          Integer pingIntervalSec, Boolean activeMonitor) {
-        jdbcTemplate.update("INSERT INTO " + schema + ".api_endpoint_registry " +
-                        "(name, path, http_method, description, ping_interval_sec, active_monitor) " +
-                        "VALUES (?,?,?,?,?,?) ON DUPLICATE KEY UPDATE " +
-                        "name=VALUES(name), description=VALUES(description), " +
-                        "ping_interval_sec=VALUES(ping_interval_sec), active_monitor=VALUES(active_monitor)",
-                name, path, method, description, pingIntervalSec, activeMonitor);
+        String sql;
+        if (postgres) {
+            sql = "INSERT INTO " + schema + ".api_endpoint_registry " +
+                    "(name, path, http_method, description, ping_interval_sec, active_monitor) " +
+                    "VALUES (?,?,?,?,?,?) ON CONFLICT (path, http_method) DO UPDATE SET " +
+                    "name=EXCLUDED.name, description=EXCLUDED.description, " +
+                    "ping_interval_sec=EXCLUDED.ping_interval_sec, active_monitor=EXCLUDED.active_monitor";
+        } else {
+            sql = "INSERT INTO " + schema + ".api_endpoint_registry " +
+                    "(name, path, http_method, description, ping_interval_sec, active_monitor) " +
+                    "VALUES (?,?,?,?,?,?) ON DUPLICATE KEY UPDATE " +
+                    "name=VALUES(name), description=VALUES(description), " +
+                    "ping_interval_sec=VALUES(ping_interval_sec), active_monitor=VALUES(active_monitor)";
+        }
+        jdbcTemplate.update(sql, name, path, method, description, pingIntervalSec, activeMonitor);
     }
 
     public List<ApiEndpointView> listEndpointsWithStats(String filter) {
@@ -155,19 +166,29 @@ public class ApiHealthRepository {
         }
     };
 
-    public List<ApiEndpointView> endpointsNeedingPing(long nowEpochSeconds) {
+    public List<ApiEndpointView> endpointsMarkedForPing() {
         String sql = "SELECT r.id, r.name, r.path, r.http_method, r.description, " +
                 "r.ping_interval_sec, r.active_monitor, r.last_check_time, r.last_check_status, r.last_check_success, r.last_check_body, " +
                 "0 AS total_calls, 0 AS success_calls, 0 AS failure_calls, 0 AS avg_duration_ms, r.last_check_time AS last_called " +
                 "FROM " + schema + ".api_endpoint_registry r " +
-                "WHERE r.active_monitor = TRUE AND r.ping_interval_sec > 0 " +
-                "AND (r.last_check_time IS NULL OR UNIX_TIMESTAMP(r.last_check_time) <= ? - r.ping_interval_sec)";
-        return jdbcTemplate.query(sql, endpointMapper, nowEpochSeconds);
+                "WHERE r.active_monitor = TRUE AND r.ping_interval_sec > 0";
+        return jdbcTemplate.query(sql, endpointMapper);
     }
 
     public void updateMonitorStatus(long id, int status, boolean success, String body, OffsetDateTime checkedAt) {
         jdbcTemplate.update("UPDATE " + schema + ".api_endpoint_registry SET " +
                         "last_check_status=?, last_check_success=?, last_check_body=?, last_check_time=? WHERE id=?",
                 status, success, body, checkedAt, id);
+    }
+
+    private boolean detectPostgres(JdbcTemplate jdbcTemplate) {
+        try {
+            String product = jdbcTemplate.getDataSource() != null
+                    ? jdbcTemplate.getDataSource().getConnection().getMetaData().getDatabaseProductName()
+                    : "";
+            return product != null && product.toLowerCase().contains("postgres");
+        } catch (Exception e) {
+            return false;
+        }
     }
 }
