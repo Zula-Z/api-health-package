@@ -164,8 +164,10 @@ public class ApiHealthRepository {
         String sql = "INSERT INTO " + schema + ".api_call_logs " +
                 "(id, timestamp, url, http_method, request_headers, request_body, response_headers, response_body, http_status, duration_ms, trace_id, success, error_message) " +
                 "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)";
+        // MySQL expects CHAR(36); Postgres accepts native UUID. Send the right shape.
+        Object idParam = postgres ? entry.getId() : entry.getId().toString();
         jdbcTemplate.update(sql,
-                entry.getId(), // pass UUID directly so Postgres UUID columns work
+                idParam,
                 entry.getTimestamp(),
                 entry.getUrl(),
                 entry.getHttpMethod(),
@@ -255,13 +257,15 @@ public class ApiHealthRepository {
                     "(name, path, http_method, description, ping_interval_sec, active_monitor) " +
                     "VALUES (?,?,?,?,?,?) ON CONFLICT (path, http_method) DO UPDATE SET " +
                     "name=EXCLUDED.name, description=EXCLUDED.description, " +
-                    "ping_interval_sec=EXCLUDED.ping_interval_sec, active_monitor=EXCLUDED.active_monitor";
+                    "ping_interval_sec=GREATEST(" + schema + ".api_endpoint_registry.ping_interval_sec, EXCLUDED.ping_interval_sec), " +
+                    "active_monitor=(" + schema + ".api_endpoint_registry.active_monitor OR EXCLUDED.active_monitor)";
         }
         return "INSERT INTO " + schema + ".api_endpoint_registry " +
                 "(name, path, http_method, description, ping_interval_sec, active_monitor) " +
                 "VALUES (?,?,?,?,?,?) ON DUPLICATE KEY UPDATE " +
                 "name=VALUES(name), description=VALUES(description), " +
-                "ping_interval_sec=VALUES(ping_interval_sec), active_monitor=VALUES(active_monitor)";
+                "ping_interval_sec=GREATEST(" + schema + ".api_endpoint_registry.ping_interval_sec, VALUES(ping_interval_sec)), " +
+                "active_monitor=(" + schema + ".api_endpoint_registry.active_monitor OR VALUES(active_monitor))";
     }
 
     private void addMonitorColumns() {
