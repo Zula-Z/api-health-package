@@ -6,7 +6,7 @@
 
     <groupId>com.zula</groupId>
     <artifactId>zula-api-health-library</artifactId>
-    <version>1.9.6</version>
+    <version>1.9.7</version>
     <packaging>jar</packaging>
 
     <name>Zula API Health Library (Boot 2.7)</name>

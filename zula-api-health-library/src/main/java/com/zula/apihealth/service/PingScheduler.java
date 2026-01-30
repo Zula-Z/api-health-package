@@ -9,7 +9,7 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 import java.util.List;
 
 /**
@@ -18,6 +18,7 @@ import java.util.List;
  */
 public class PingScheduler {
     private static final Logger log = LoggerFactory.getLogger(PingScheduler.class);
+    private static final ZoneId ZONE_NAIROBI = ZoneId.of("Africa/Nairobi");
 
     private final ApiHealthService service;
     private final RestTemplate restTemplate;
@@ -35,7 +36,7 @@ public class PingScheduler {
             log.debug("PingScheduler: no endpoints eligible for ping right now");
             return;
         }
-        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        OffsetDateTime now = OffsetDateTime.now(ZONE_NAIROBI);
         log.debug("PingScheduler: will ping {} endpoint(s)", targets.size());
         for (ApiEndpointView endpoint : targets) {
             try {

@@ -19,6 +19,10 @@ public class ApiEndpointView {
     private Integer lastCheckStatus;
     private Boolean lastCheckSuccess;
     private String lastCheckBody;
+    // Derived convenience flag: true=up, false=down, null=unknown/not yet checked
+    private Boolean up;
+    // Human friendly status text ("UP", "DOWN", "UNKNOWN") derived from last check
+    private String healthStatus;
 
     // getters and setters
     public Long getId() { return id; }
@@ -68,4 +72,10 @@ public class ApiEndpointView {
 
     public String getLastCheckBody() { return lastCheckBody; }
     public void setLastCheckBody(String lastCheckBody) { this.lastCheckBody = lastCheckBody; }
+
+    public Boolean getUp() { return up; }
+    public void setUp(Boolean up) { this.up = up; }
+
+    public String getHealthStatus() { return healthStatus; }
+    public void setHealthStatus(String healthStatus) { this.healthStatus = healthStatus; }
 }

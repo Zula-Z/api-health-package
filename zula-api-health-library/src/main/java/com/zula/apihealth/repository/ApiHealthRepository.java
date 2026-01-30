@@ -12,6 +12,7 @@ import org.springframework.jdbc.core.RowMapper;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
 
@@ -25,6 +26,8 @@ public class ApiHealthRepository {
     private final ApiHealthProperties properties;
     private final String schema;
     private final boolean postgres;
+    private final ZoneId zone = ZoneId.of("Africa/Nairobi");
+    private final String orderByPathLength = " ORDER BY LENGTH(path) DESC LIMIT 1";
     private volatile boolean tablesEnsured = false;
 
     /**
@@ -193,7 +196,7 @@ public class ApiHealthRepository {
             v.setDescription(rs.getString("description"));
             v.setPingIntervalSec((Integer) rs.getObject("ping_interval_sec"));
             v.setActiveMonitor((Boolean) rs.getObject("active_monitor"));
-            v.setLastCheckTime(rs.getTimestamp("last_check_time") != null ? rs.getTimestamp("last_check_time").toInstant().atOffset(java.time.ZoneOffset.UTC) : null);
+            v.setLastCheckTime(rs.getTimestamp("last_check_time") != null ? rs.getTimestamp("last_check_time").toInstant().atZone(zone).toOffsetDateTime() : null);
             v.setLastCheckStatus((Integer) rs.getObject("last_check_status"));
             v.setLastCheckSuccess((Boolean) rs.getObject("last_check_success"));
             v.setLastCheckBody(rs.getString("last_check_body"));
@@ -201,7 +204,16 @@ public class ApiHealthRepository {
             v.setSuccessCalls(rs.getLong("success_calls"));
             v.setFailureCalls(rs.getLong("failure_calls"));
             v.setAvgDurationMs(rs.getDouble("avg_duration_ms"));
-            v.setLastCalled(rs.getTimestamp("last_called") != null ? rs.getTimestamp("last_called").toInstant().atOffset(java.time.ZoneOffset.UTC) : null);
+            v.setLastCalled(rs.getTimestamp("last_called") != null ? rs.getTimestamp("last_called").toInstant().atZone(zone).toOffsetDateTime() : null);
+            if (v.getLastCheckSuccess() != null) {
+                v.setUp(v.getLastCheckSuccess());
+            } else if (v.getLastCheckStatus() != null) {
+                int s = v.getLastCheckStatus();
+                v.setUp(s >= 200 && s < 400);
+            } else {
+                v.setUp(null);
+            }
+            v.setHealthStatus(v.getUp() == null ? "UNKNOWN" : (v.getUp() ? "UP" : "DOWN"));
             return v;
         }
     };
@@ -211,7 +223,7 @@ public class ApiHealthRepository {
         public ApiLogView mapRow(ResultSet rs, int rowNum) throws SQLException {
             ApiLogView v = new ApiLogView();
             v.setId(UUID.fromString(rs.getString("id")));
-            v.setTimestamp(rs.getTimestamp("timestamp").toInstant().atOffset(java.time.ZoneOffset.UTC));
+            v.setTimestamp(rs.getTimestamp("timestamp").toInstant().atZone(zone).toOffsetDateTime());
             v.setUrl(rs.getString("url"));
             v.setHttpMethod(rs.getString("http_method"));
             v.setHttpStatus(rs.getObject("http_status") == null ? null : rs.getInt("http_status"));
@@ -249,6 +261,24 @@ public class ApiHealthRepository {
         jdbcTemplate.update("UPDATE " + schema + ".api_endpoint_registry SET " +
                         "last_check_status=?, last_check_success=?, last_check_body=?, last_check_time=? WHERE id=?",
                 status, success, body, checkedAt, id);
+    }
+
+    /**
+     * Update monitor fields based on a live request (used even when active_monitor is false).
+     * Longest matching path prefix wins.
+     */
+    public void updateMonitorStatusByUrl(String url, String method, int status, boolean success, String body, OffsetDateTime checkedAt) {
+        String sql = "UPDATE " + schema + ".api_endpoint_registry SET " +
+                "last_check_status=?, last_check_success=?, last_check_body=?, last_check_time=? " +
+                "WHERE ? LIKE CONCAT(path, '%') AND http_method = ?" + orderByPathLength;
+        try {
+            int updated = jdbcTemplate.update(sql, status, success, body, checkedAt, url, method);
+            if (log.isDebugEnabled()) {
+                log.debug("updateMonitorStatusByUrl {} {} -> {} row(s)", method, url, updated);
+            }
+        } catch (Exception ex) {
+            log.debug("updateMonitorStatusByUrl failed for {} {} : {}", method, url, ex.getMessage());
+        }
     }
 
     private String insertSql() {

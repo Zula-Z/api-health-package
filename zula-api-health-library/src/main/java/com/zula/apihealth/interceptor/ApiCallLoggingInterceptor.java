@@ -13,6 +13,7 @@ import org.springframework.http.client.ClientHttpResponse;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.util.UUID;
 
 /**
@@ -21,6 +22,7 @@ import java.util.UUID;
  */
 public class ApiCallLoggingInterceptor implements ClientHttpRequestInterceptor {
     private static final Logger log = LoggerFactory.getLogger(ApiCallLoggingInterceptor.class);
+    private static final ZoneId ZONE_NAIROBI = ZoneId.of("Africa/Nairobi");
     private final ApiHealthService apiHealthService;
     private final int maxBodyLength = 8000;
 
@@ -31,7 +33,7 @@ public class ApiCallLoggingInterceptor implements ClientHttpRequestInterceptor {
     /** Capture and log a single outbound HTTP exchange. */
     @Override
     public ClientHttpResponse intercept(HttpRequest request, byte[] body, ClientHttpRequestExecution execution) throws IOException {
-        OffsetDateTime start = OffsetDateTime.now();
+        OffsetDateTime start = OffsetDateTime.now(ZONE_NAIROBI);
         String url = request.getURI().toString();
         String method = request.getMethod() != null ? request.getMethod().name() : "UNKNOWN";
         String reqHeaders = request.getHeaders().toString();
@@ -47,14 +49,14 @@ public class ApiCallLoggingInterceptor implements ClientHttpRequestInterceptor {
         try {
             ClientHttpResponse response = execution.execute(request, body);
             BufferingClientHttpResponseWrapper buffered = new BufferingClientHttpResponseWrapper(response);
-            durationMs = (int) (OffsetDateTime.now().toInstant().toEpochMilli() - start.toInstant().toEpochMilli());
+            durationMs = (int) (OffsetDateTime.now(ZONE_NAIROBI).toInstant().toEpochMilli() - start.toInstant().toEpochMilli());
             status = buffered.getRawStatusCode();
             respHeaders = buffered.getHeaders().toString();
             respBody = truncate(buffered.getBodyAsString());
             success = status >= 200 && status < 400;
             return buffered;
         } catch (Exception ex) {
-            durationMs = (int) (OffsetDateTime.now().toInstant().toEpochMilli() - start.toInstant().toEpochMilli());
+            durationMs = (int) (OffsetDateTime.now(ZONE_NAIROBI).toInstant().toEpochMilli() - start.toInstant().toEpochMilli());
             errorMessage = ex.getMessage();
             throw ex;
         } finally {

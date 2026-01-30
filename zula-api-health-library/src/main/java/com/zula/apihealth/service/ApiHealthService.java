@@ -62,6 +62,11 @@ public class ApiHealthService {
     /** Persist a captured API call log entry. */
     public void logCall(ApiCallLogEntry entry) {
         repository.insertLog(entry);
+        // Also refresh monitor metadata based on this real call, even if active_monitor=false
+        if (entry.getHttpStatus() != null) {
+            boolean ok = entry.getHttpStatus() >= 200 && entry.getHttpStatus() < 400;
+            repository.updateMonitorStatusByUrl(entry.getUrl(), entry.getHttpMethod(), entry.getHttpStatus(), ok, entry.getResponseBody(), entry.getTimestamp());
+        }
     }
 
     /** Endpoints marked for monitor whose interval has elapsed. */
