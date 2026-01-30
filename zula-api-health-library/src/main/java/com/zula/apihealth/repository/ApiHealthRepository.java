@@ -31,21 +31,17 @@ public class ApiHealthRepository {
 
     public void registerEndpointIfAbsent(String name, String path, String method, String description,
                                          Integer pingIntervalSec, Boolean activeMonitor) {
-        String sql;
-        if (postgres) {
-            sql = "INSERT INTO " + schema + ".api_endpoint_registry " +
-                    "(name, path, http_method, description, ping_interval_sec, active_monitor) " +
-                    "VALUES (?,?,?,?,?,?) ON CONFLICT (path, http_method) DO UPDATE SET " +
-                    "name=EXCLUDED.name, description=EXCLUDED.description, " +
-                    "ping_interval_sec=EXCLUDED.ping_interval_sec, active_monitor=EXCLUDED.active_monitor";
-        } else {
-            sql = "INSERT INTO " + schema + ".api_endpoint_registry " +
-                    "(name, path, http_method, description, ping_interval_sec, active_monitor) " +
-                    "VALUES (?,?,?,?,?,?) ON DUPLICATE KEY UPDATE " +
-                    "name=VALUES(name), description=VALUES(description), " +
-                    "ping_interval_sec=VALUES(ping_interval_sec), active_monitor=VALUES(active_monitor)";
+        String sql = insertSql();
+        try {
+            jdbcTemplate.update(sql, name, path, method, description, pingIntervalSec, activeMonitor);
+        } catch (org.springframework.jdbc.BadSqlGrammarException ex) {
+            if (ex.getMessage() != null && ex.getMessage().contains("ping_interval_sec")) {
+                addMonitorColumns();
+                jdbcTemplate.update(sql, name, path, method, description, pingIntervalSec, activeMonitor);
+            } else {
+                throw ex;
+            }
         }
-        jdbcTemplate.update(sql, name, path, method, description, pingIntervalSec, activeMonitor);
     }
 
     public List<ApiEndpointView> listEndpointsWithStats(String filter) {
@@ -179,6 +175,43 @@ public class ApiHealthRepository {
         jdbcTemplate.update("UPDATE " + schema + ".api_endpoint_registry SET " +
                         "last_check_status=?, last_check_success=?, last_check_body=?, last_check_time=? WHERE id=?",
                 status, success, body, checkedAt, id);
+    }
+
+    private String insertSql() {
+        if (postgres) {
+            return "INSERT INTO " + schema + ".api_endpoint_registry " +
+                    "(name, path, http_method, description, ping_interval_sec, active_monitor) " +
+                    "VALUES (?,?,?,?,?,?) ON CONFLICT (path, http_method) DO UPDATE SET " +
+                    "name=EXCLUDED.name, description=EXCLUDED.description, " +
+                    "ping_interval_sec=EXCLUDED.ping_interval_sec, active_monitor=EXCLUDED.active_monitor";
+        }
+        return "INSERT INTO " + schema + ".api_endpoint_registry " +
+                "(name, path, http_method, description, ping_interval_sec, active_monitor) " +
+                "VALUES (?,?,?,?,?,?) ON DUPLICATE KEY UPDATE " +
+                "name=VALUES(name), description=VALUES(description), " +
+                "ping_interval_sec=VALUES(ping_interval_sec), active_monitor=VALUES(active_monitor)";
+    }
+
+    private void addMonitorColumns() {
+        try {
+            jdbcTemplate.execute("ALTER TABLE " + schema + ".api_endpoint_registry ADD COLUMN IF NOT EXISTS ping_interval_sec INT DEFAULT 0");
+        } catch (Exception ignored) {}
+        try {
+            jdbcTemplate.execute("ALTER TABLE " + schema + ".api_endpoint_registry ADD COLUMN IF NOT EXISTS active_monitor BOOLEAN DEFAULT FALSE");
+        } catch (Exception ignored) {}
+        try {
+            String ts = postgres ? "TIMESTAMP" : "DATETIME";
+            jdbcTemplate.execute("ALTER TABLE " + schema + ".api_endpoint_registry ADD COLUMN IF NOT EXISTS last_check_time " + ts + " NULL");
+        } catch (Exception ignored) {}
+        try {
+            jdbcTemplate.execute("ALTER TABLE " + schema + ".api_endpoint_registry ADD COLUMN IF NOT EXISTS last_check_status INT NULL");
+        } catch (Exception ignored) {}
+        try {
+            jdbcTemplate.execute("ALTER TABLE " + schema + ".api_endpoint_registry ADD COLUMN IF NOT EXISTS last_check_success BOOLEAN NULL");
+        } catch (Exception ignored) {}
+        try {
+            jdbcTemplate.execute("ALTER TABLE " + schema + ".api_endpoint_registry ADD COLUMN IF NOT EXISTS last_check_body TEXT NULL");
+        } catch (Exception ignored) {}
     }
 
     private boolean detectPostgres(JdbcTemplate jdbcTemplate) {
