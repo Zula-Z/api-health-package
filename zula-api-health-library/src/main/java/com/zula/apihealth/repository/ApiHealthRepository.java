@@ -135,7 +135,7 @@ public class ApiHealthRepository {
                 "(id, timestamp, url, http_method, request_headers, request_body, response_headers, response_body, http_status, duration_ms, trace_id, success, error_message) " +
                 "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)";
         jdbcTemplate.update(sql,
-                entry.getId().toString(),
+                entry.getId(), // pass UUID directly so Postgres UUID columns work
                 entry.getTimestamp(),
                 entry.getUrl(),
                 entry.getHttpMethod(),

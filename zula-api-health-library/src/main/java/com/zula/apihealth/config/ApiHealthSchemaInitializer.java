@@ -36,7 +36,7 @@ public class ApiHealthSchemaInitializer implements InitializingBean {
 
         if (postgres) {
             jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS " + schema + ".api_call_logs (" +
-                    "id CHAR(36) PRIMARY KEY," +
+                    "id UUID PRIMARY KEY," +
                     "\"timestamp\" TIMESTAMP NOT NULL," +
                     "url TEXT NOT NULL," +
                     "http_method VARCHAR(10) NOT NULL," +

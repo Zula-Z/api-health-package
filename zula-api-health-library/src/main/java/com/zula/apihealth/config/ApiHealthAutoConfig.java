@@ -5,6 +5,7 @@ import com.zula.apihealth.controller.ApiHealthController;
 import com.zula.apihealth.interceptor.ApiCallLoggingInterceptor;
 import com.zula.apihealth.repository.ApiHealthRepository;
 import com.zula.apihealth.scanner.ApiEndpointScanner;
+import com.zula.apihealth.scanner.ApiEndpointRescan;
 import com.zula.apihealth.service.ApiHealthService;
 import com.zula.apihealth.service.PingScheduler;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -64,6 +65,12 @@ public class ApiHealthAutoConfig {
     @ConditionalOnMissingBean
     public ApiEndpointScanner apiEndpointScanner(ApiHealthRepository repository, Environment environment) {
         return new ApiEndpointScanner(repository, environment);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public ApiEndpointRescan apiEndpointRescan(ApiEndpointScanner scanner, Environment environment) {
+        return new ApiEndpointRescan(scanner, environment);
     }
 
     @Bean

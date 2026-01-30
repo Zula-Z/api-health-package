@@ -10,6 +10,7 @@ import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.core.MethodIntrospector;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.core.env.Environment;
+import org.springframework.aop.support.AopUtils;
 
 import java.lang.reflect.Method;
 import java.util.Map;
@@ -31,7 +32,8 @@ public class ApiEndpointScanner implements BeanPostProcessor {
 
     @Override
     public Object postProcessAfterInitialization(Object bean, String beanName) throws BeansException {
-        Class<?> targetClass = bean.getClass();
+        Class<?> targetClass = AopUtils.getTargetClass(bean);
+        log.debug("Scanning bean '{}' of type {}", beanName, targetClass.getName());
 
         Map<Method, TrackApiEndpoint> annotated = MethodIntrospector.selectMethods(targetClass,
                 (MethodIntrospector.MetadataLookup<TrackApiEndpoint>) method ->
@@ -62,6 +64,10 @@ public class ApiEndpointScanner implements BeanPostProcessor {
             log.info("Registered tracked API endpoint {} {} ({}) monitor active={} intervalSec={}",
                     ann.method(), resolvedPath, beanName + "#" + method.getName(), active, pingInterval);
         });
+
+        if (annotated.isEmpty()) {
+            log.debug("No @TrackApiEndpoint methods found on {}", targetClass.getName());
+        }
 
         return bean;
     }
