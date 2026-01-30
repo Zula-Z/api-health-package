@@ -37,13 +37,16 @@ public class ApiHealthRepository {
         String sql = insertSql();
         try {
             jdbcTemplate.update(sql, name, path, method, description, pingIntervalSec, activeMonitor);
+            return;
         } catch (org.springframework.jdbc.BadSqlGrammarException ex) {
-            if (ex.getMessage() != null && ex.getMessage().contains("ping_interval_sec")) {
-                addMonitorColumns();
-                jdbcTemplate.update(sql, name, path, method, description, pingIntervalSec, activeMonitor);
-            } else {
-                throw ex;
-            }
+            // Likely missing new monitor columns; attempt to add them and retry once.
+            addMonitorColumns();
+            jdbcTemplate.update(sql, name, path, method, description, pingIntervalSec, activeMonitor);
+            return;
+        } catch (org.springframework.dao.DataAccessException ex) {
+            // Fallback for any other SQL dialect errors; try once after adding columns.
+            addMonitorColumns();
+            jdbcTemplate.update(sql, name, path, method, description, pingIntervalSec, activeMonitor);
         }
     }
 

@@ -2,6 +2,7 @@ package com.zula.apihealth.interceptor;
 
 import com.zula.apihealth.model.ApiCallLogEntry;
 import com.zula.apihealth.service.ApiHealthService;
+import com.zula.apihealth.interceptor.BufferingClientHttpResponseWrapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpRequest;
