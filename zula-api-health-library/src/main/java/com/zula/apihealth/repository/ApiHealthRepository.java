@@ -11,6 +11,7 @@ import org.springframework.jdbc.core.RowMapper;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.SQLSyntaxErrorException;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -21,6 +22,7 @@ public class ApiHealthRepository {
     private final ApiHealthProperties properties;
     private final String schema;
     private final boolean postgres;
+    private volatile boolean tablesEnsured = false;
 
     public ApiHealthRepository(JdbcTemplate jdbcTemplate, ApiHealthProperties properties) {
         this.jdbcTemplate = jdbcTemplate;
@@ -44,9 +46,15 @@ public class ApiHealthRepository {
             jdbcTemplate.update(sql, name, path, method, description, pingIntervalSec, activeMonitor);
             return;
         } catch (org.springframework.dao.DataAccessException ex) {
-            // Fallback for any other SQL dialect errors; try once after adding columns.
-            addMonitorColumns();
-            jdbcTemplate.update(sql, name, path, method, description, pingIntervalSec, activeMonitor);
+            // Fallback for table/schema missing: create everything and retry once
+            if (isMissingTable(ex)) {
+                ensureTables();
+                jdbcTemplate.update(sql, name, path, method, description, pingIntervalSec, activeMonitor);
+            } else {
+                // Try once after adding columns too
+                addMonitorColumns();
+                jdbcTemplate.update(sql, name, path, method, description, pingIntervalSec, activeMonitor);
+            }
         }
     }
 
@@ -243,6 +251,91 @@ public class ApiHealthRepository {
         try {
             jdbcTemplate.execute("ALTER TABLE " + schema + ".api_endpoint_registry ADD COLUMN IF NOT EXISTS last_check_body TEXT NULL");
         } catch (Exception ignored) {}
+    }
+
+    private void ensureTables() {
+        if (tablesEnsured) return;
+        synchronized (this) {
+            if (tablesEnsured) return;
+            try {
+                if (postgres) {
+                    jdbcTemplate.execute("CREATE SCHEMA IF NOT EXISTS " + schema);
+                    jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS " + schema + ".api_call_logs (" +
+                            "id UUID PRIMARY KEY," +
+                            "\"timestamp\" TIMESTAMP NOT NULL," +
+                            "url TEXT NOT NULL," +
+                            "http_method VARCHAR(10) NOT NULL," +
+                            "request_headers TEXT," +
+                            "request_body TEXT," +
+                            "response_headers TEXT," +
+                            "response_body TEXT," +
+                            "http_status INTEGER," +
+                            "duration_ms INTEGER NOT NULL," +
+                            "trace_id VARCHAR(64) NOT NULL," +
+                            "success BOOLEAN NOT NULL," +
+                            "error_message TEXT" +
+                            ")");
+                    jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS " + schema + ".api_endpoint_registry (" +
+                            "id BIGSERIAL PRIMARY KEY," +
+                            "name VARCHAR(200)," +
+                            "path TEXT NOT NULL," +
+                            "http_method VARCHAR(10) NOT NULL," +
+                            "description TEXT," +
+                            "ping_interval_sec INT DEFAULT 0," +
+                            "active_monitor BOOLEAN DEFAULT FALSE," +
+                            "last_check_time TIMESTAMP NULL," +
+                            "last_check_status INT NULL," +
+                            "last_check_success BOOLEAN NULL," +
+                            "last_check_body TEXT NULL," +
+                            "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP," +
+                            "UNIQUE(path, http_method)" +
+                            ")");
+                } else {
+                    jdbcTemplate.execute("CREATE SCHEMA IF NOT EXISTS " + schema);
+                    jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS " + schema + ".api_call_logs (" +
+                            "id CHAR(36) PRIMARY KEY," +
+                            "`timestamp` DATETIME NOT NULL," +
+                            "url TEXT NOT NULL," +
+                            "http_method VARCHAR(10) NOT NULL," +
+                            "request_headers TEXT," +
+                            "request_body TEXT," +
+                            "response_headers TEXT," +
+                            "response_body TEXT," +
+                            "http_status INTEGER," +
+                            "duration_ms INTEGER NOT NULL," +
+                            "trace_id VARCHAR(64) NOT NULL," +
+                            "success BOOLEAN NOT NULL," +
+                            "error_message TEXT" +
+                            ")");
+                    jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS " + schema + ".api_endpoint_registry (" +
+                            "id BIGINT PRIMARY KEY AUTO_INCREMENT," +
+                            "name VARCHAR(200)," +
+                            "path TEXT NOT NULL," +
+                            "http_method VARCHAR(10) NOT NULL," +
+                            "description TEXT," +
+                            "ping_interval_sec INT DEFAULT 0," +
+                            "active_monitor BOOLEAN DEFAULT FALSE," +
+                            "last_check_time DATETIME NULL," +
+                            "last_check_status INT NULL," +
+                            "last_check_success BOOLEAN NULL," +
+                            "last_check_body TEXT NULL," +
+                            "created_at DATETIME DEFAULT CURRENT_TIMESTAMP," +
+                            "UNIQUE(path(255), http_method)" +
+                            ")");
+                }
+                tablesEnsured = true;
+                log.info("ApiHealth tables ensured in schema {}", schema);
+            } catch (Exception e) {
+                log.warn("Failed to auto-create API health tables in schema {}: {}", schema, e.getMessage());
+            }
+        }
+    }
+
+    private boolean isMissingTable(Exception ex) {
+        String msg = ex.getMessage();
+        if (msg == null) return false;
+        msg = msg.toLowerCase();
+        return msg.contains("doesn't exist") || msg.contains("does not exist") || msg.contains("undefined table");
     }
 
     private boolean detectPostgres(JdbcTemplate jdbcTemplate) {
