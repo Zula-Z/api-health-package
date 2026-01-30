@@ -1,6 +1,8 @@
 package com.zula.apihealth.controller;
 
 import com.zula.apihealth.model.ApiEndpointView;
+import com.zula.apihealth.model.ApiEndpointStatsResponse;
+import com.zula.apihealth.model.ApiHealthResponse;
 import com.zula.apihealth.model.ApiLogView;
 import com.zula.apihealth.service.ApiHealthService;
 import lombok.extern.slf4j.Slf4j;
@@ -24,13 +26,14 @@ public class ApiHealthController {
 
     /** List endpoints with aggregated stats; optional filter, date/time range, sort, and status filter. */
     @GetMapping("/endpoints")
-    public List<ApiEndpointView> endpoints(@RequestParam(name = "filter", required = false) String filter,
-                                           @RequestParam(name = "from", required = false) String from,
-                                           @RequestParam(name = "to", required = false) String to,
-                                           @RequestParam(name = "sort", required = false) String sort,
-                                           @RequestParam(name = "desc", defaultValue = "false") boolean desc,
-                                           @RequestParam(name = "status", required = false) String statusCsv) {
-        return service.listEndpoints(filter, from, to, sort, desc, parseStatuses(statusCsv), null);
+    public List<ApiEndpointStatsResponse> endpoints(@RequestParam(name = "filter", required = false) String filter,
+                                                    @RequestParam(name = "from", required = false) String from,
+                                                    @RequestParam(name = "to", required = false) String to,
+                                                    @RequestParam(name = "sort", required = false) String sort,
+                                                    @RequestParam(name = "desc", defaultValue = "false") boolean desc,
+                                                    @RequestParam(name = "status", required = false) String statusCsv) {
+        return service.listEndpoints(filter, from, to, sort, desc, parseStatuses(statusCsv), null)
+                .stream().map(this::toStatsDto).toList();
     }
 
     /** Get one endpoint; optionally include recent logs. */
@@ -66,17 +69,17 @@ public class ApiHealthController {
 
     /** Health view for all endpoints; shows UP/DOWN/UNKNOWN and last check fields. */
     @GetMapping("/monitoring")
-    public List<ApiEndpointView> monitoring(@RequestParam(name = "filter", required = false) String filter,
-                                            @RequestParam(name = "from", required = false) String from,
-                                            @RequestParam(name = "to", required = false) String to,
-                                            @RequestParam(name = "sort", required = false) String sort,
-                                            @RequestParam(name = "desc", defaultValue = "false") boolean desc,
-                                            @RequestParam(name = "status", required = false) String statusCsv,
-                                            @RequestParam(name = "active", required = false) Boolean onlyActive) {
+    public List<ApiHealthResponse> monitoring(@RequestParam(name = "filter", required = false) String filter,
+                                              @RequestParam(name = "from", required = false) String from,
+                                              @RequestParam(name = "to", required = false) String to,
+                                              @RequestParam(name = "sort", required = false) String sort,
+                                              @RequestParam(name = "desc", defaultValue = "false") boolean desc,
+                                              @RequestParam(name = "status", required = false) String statusCsv,
+                                              @RequestParam(name = "active", required = false) Boolean onlyActive) {
         log.debug("Monitoring endpoint hit with filter={}", filter);
         List<ApiEndpointView> list = service.listHealth(filter, from, to, sort, desc, parseStatuses(statusCsv), onlyActive);
         log.debug("Monitoring result size={}", list.size());
-        return list;
+        return list.stream().map(this::toHealthDto).toList();
     }
 
     private List<Integer> parseStatuses(String csv) {
@@ -89,6 +92,39 @@ public class ApiHealthController {
             } catch (NumberFormatException ignored) { }
         }
         return out.isEmpty() ? null : out;
+    }
+
+    private ApiEndpointStatsResponse toStatsDto(ApiEndpointView v) {
+        ApiEndpointStatsResponse dto = new ApiEndpointStatsResponse();
+        dto.id = v.getId();
+        dto.name = v.getName();
+        dto.path = v.getPath();
+        dto.method = v.getMethod();
+        dto.description = v.getDescription();
+        dto.totalCalls = v.getTotalCalls();
+        dto.successCalls = v.getSuccessCalls();
+        dto.failureCalls = v.getFailureCalls();
+        dto.avgDurationMs = v.getAvgDurationMs();
+        dto.lastCalled = v.getLastCalled();
+        return dto;
+    }
+
+    private ApiHealthResponse toHealthDto(ApiEndpointView v) {
+        ApiHealthResponse dto = new ApiHealthResponse();
+        dto.id = v.getId();
+        dto.name = v.getName();
+        dto.path = v.getPath();
+        dto.method = v.getMethod();
+        dto.description = v.getDescription();
+        dto.healthStatus = v.getHealthStatus();
+        dto.up = v.getUp();
+        dto.lastCheckTime = v.getLastCheckTime();
+        dto.lastCheckStatus = v.getLastCheckStatus();
+        dto.lastCheckSuccess = v.getLastCheckSuccess();
+        dto.lastCheckBody = v.getLastCheckBody();
+        dto.pingIntervalSec = v.getPingIntervalSec();
+        dto.activeMonitor = v.getActiveMonitor();
+        return dto;
     }
 
     static class EndpointWithLogs {
