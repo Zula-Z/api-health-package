@@ -51,7 +51,7 @@ public class PingScheduler {
     private String truncate(String body) {
         if (body == null) return null;
         if (body.length() > 4000) {
-            return body.substring(0, 4000) + \"...<truncated>\";
+            return body.substring(0, 4000) + "...<truncated>";
         }
         return body;
     }

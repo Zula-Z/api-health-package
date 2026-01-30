@@ -77,10 +77,10 @@ public class ApiHealthSchemaInitializer implements InitializingBean {
         String sql = "ALTER TABLE " + schema + "." + table + " ADD COLUMN " + columnDef;
         try {
             jdbcTemplate.execute(sql);
-            log.info("Added column {} to {}.{}", columnDef.split(\" \")[0], schema, table);
+            log.info("Added column {} to {}.{}", columnDef.split(" ")[0], schema, table);
         } catch (Exception e) {
             // Column likely exists; swallow to stay non-breaking
-            log.debug(\"Column add skipped for {}.{} -> {} : {}\", schema, table, columnDef, e.getMessage());
+            log.debug("Column add skipped for {}.{} -> {} : {}", schema, table, columnDef, e.getMessage());
         }
     }
 
