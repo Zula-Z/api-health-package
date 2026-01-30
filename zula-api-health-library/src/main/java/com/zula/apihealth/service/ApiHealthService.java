@@ -6,6 +6,7 @@ import com.zula.apihealth.model.ApiEndpointView;
 import com.zula.apihealth.model.ApiLogView;
 import com.zula.apihealth.repository.ApiHealthRepository;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 
 public class ApiHealthService {
@@ -17,8 +18,8 @@ public class ApiHealthService {
         this.properties = properties;
     }
 
-    public List<ApiEndpointView> listEndpoints() {
-        return repository.listEndpointsWithStats();
+    public List<ApiEndpointView> listEndpoints(String filter) {
+        return repository.listEndpointsWithStats(filter);
     }
 
     public ApiEndpointView getEndpoint(long id) {
@@ -41,10 +42,19 @@ public class ApiHealthService {
     }
 
     public void registerEndpoint(String name, String path, String method, String description) {
-        repository.registerEndpointIfAbsent(name, path, method, description);
+        repository.registerEndpointIfAbsent(name, path, method, description, 0, false);
     }
 
     public void logCall(ApiCallLogEntry entry) {
         repository.insertLog(entry);
+    }
+
+    public List<ApiEndpointView> endpointsNeedingPing() {
+        long now = java.time.Instant.now().getEpochSecond();
+        return repository.endpointsNeedingPing(now);
+    }
+
+    public void updateMonitorStatus(long id, int status, boolean success, String body, OffsetDateTime checkedAt) {
+        repository.updateMonitorStatus(id, status, success, body, checkedAt);
     }
 }

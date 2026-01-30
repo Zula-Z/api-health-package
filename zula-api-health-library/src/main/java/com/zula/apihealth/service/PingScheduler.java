@@ -1,0 +1,58 @@
+package com.zula.apihealth.service;
+
+import com.zula.apihealth.model.ApiEndpointView;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.ResponseEntity;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestTemplate;
+
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.List;
+
+/**
+ * Active pinging of external endpoints marked with {@code @EndpointMonitor(active=true)}.
+ */
+public class PingScheduler {
+    private static final Logger log = LoggerFactory.getLogger(PingScheduler.class);
+
+    private final ApiHealthService service;
+    private final RestTemplate restTemplate;
+
+    public PingScheduler(ApiHealthService service, RestTemplate restTemplate) {
+        this.service = service;
+        this.restTemplate = restTemplate;
+    }
+
+    // Run every 30 seconds; internal logic respects per-endpoint interval
+    @Scheduled(fixedDelay = 30_000)
+    public void ping() {
+        List<ApiEndpointView> targets = service.endpointsNeedingPing();
+        if (targets.isEmpty()) {
+            return;
+        }
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        for (ApiEndpointView endpoint : targets) {
+            try {
+                ResponseEntity<String> resp = restTemplate.getForEntity(endpoint.getPath(), String.class);
+                int status = resp.getStatusCodeValue();
+                String body = resp.getBody();
+                service.updateMonitorStatus(endpoint.getId(), status, status < 500, truncate(body), now);
+                log.info("Pinged {} -> status {}", endpoint.getPath(), status);
+            } catch (RestClientException ex) {
+                service.updateMonitorStatus(endpoint.getId(), 0, false, ex.getMessage(), now);
+                log.warn("Ping failed for {}: {}", endpoint.getPath(), ex.getMessage());
+            }
+        }
+    }
+
+    private String truncate(String body) {
+        if (body == null) return null;
+        if (body.length() > 4000) {
+            return body.substring(0, 4000) + \"...<truncated>\";
+        }
+        return body;
+    }
+}

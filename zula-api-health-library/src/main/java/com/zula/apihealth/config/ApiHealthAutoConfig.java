@@ -6,15 +6,19 @@ import com.zula.apihealth.interceptor.ApiCallLoggingInterceptor;
 import com.zula.apihealth.repository.ApiHealthRepository;
 import com.zula.apihealth.scanner.ApiEndpointScanner;
 import com.zula.apihealth.service.ApiHealthService;
+import com.zula.apihealth.service.PingScheduler;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.web.client.RestTemplateCustomizer;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.core.env.Environment;
+import org.springframework.boot.web.client.RestTemplateBuilder;
 
 import javax.sql.DataSource;
 
@@ -72,5 +76,16 @@ public class ApiHealthAutoConfig {
     @ConditionalOnMissingBean(name = "apiHealthRestTemplateCustomizer")
     public RestTemplateCustomizer apiHealthRestTemplateCustomizer(ApiCallLoggingInterceptor interceptor) {
         return restTemplate -> restTemplate.getInterceptors().add(interceptor);
+    }
+
+    @Configuration
+    @EnableScheduling
+    static class SchedulingConfig {
+        @Bean
+        @ConditionalOnMissingBean
+        public PingScheduler pingScheduler(ApiHealthService service, RestTemplateBuilder builder) {
+            RestTemplate rt = builder.build();
+            return new PingScheduler(service, rt);
+        }
     }
 }

@@ -27,27 +27,41 @@ public class ApiHealthRepository {
         this.schema = com.zula.apihealth.config.ApiHealthSchemaInitializer.sanitize(raw);
     }
 
-    public void registerEndpointIfAbsent(String name, String path, String method, String description) {
-        jdbcTemplate.update("INSERT IGNORE INTO " + schema + ".api_endpoint_registry (name, path, http_method, description) VALUES (?,?,?,?)",
-                name, path, method, description);
+    public void registerEndpointIfAbsent(String name, String path, String method, String description,
+                                         Integer pingIntervalSec, Boolean activeMonitor) {
+        jdbcTemplate.update("INSERT INTO " + schema + ".api_endpoint_registry " +
+                        "(name, path, http_method, description, ping_interval_sec, active_monitor) " +
+                        "VALUES (?,?,?,?,?,?) ON DUPLICATE KEY UPDATE " +
+                        "name=VALUES(name), description=VALUES(description), " +
+                        "ping_interval_sec=VALUES(ping_interval_sec), active_monitor=VALUES(active_monitor)",
+                name, path, method, description, pingIntervalSec, activeMonitor);
     }
 
-    public List<ApiEndpointView> listEndpointsWithStats() {
-        String sql = "SELECT r.id, r.name, r.path, r.http_method, r.description, " +
+    public List<ApiEndpointView> listEndpointsWithStats(String filter) {
+        String base = "SELECT r.id, r.name, r.path, r.http_method, r.description, " +
+                "r.ping_interval_sec, r.active_monitor, r.last_check_time, r.last_check_status, r.last_check_success, r.last_check_body, " +
                 "COALESCE(COUNT(l.id),0) AS total_calls, " +
                 "COALESCE(SUM(CASE WHEN l.success THEN 1 ELSE 0 END),0) AS success_calls, " +
                 "COALESCE(SUM(CASE WHEN NOT l.success THEN 1 ELSE 0 END),0) AS failure_calls, " +
                 "COALESCE(AVG(l.duration_ms),0) AS avg_duration_ms, " +
                 "MAX(l.timestamp) AS last_called " +
                 "FROM " + schema + ".api_endpoint_registry r " +
-                "LEFT JOIN " + schema + ".api_call_logs l ON l.url LIKE CONCAT(r.path, '%') " +
-                "GROUP BY r.id, r.name, r.path, r.http_method, r.description " +
-                "ORDER BY r.id";
-        return jdbcTemplate.query(sql, endpointMapper);
+                "LEFT JOIN " + schema + ".api_call_logs l ON l.url LIKE CONCAT(r.path, '%') ";
+
+        String where = "";
+        Object[] params = new Object[]{};
+        if (filter != null && !filter.isBlank()) {
+            where = "WHERE r.path LIKE CONCAT('%', ?, '%') OR r.name LIKE CONCAT('%', ?, '%') ";
+            params = new Object[]{filter, filter};
+        }
+        String tail = "GROUP BY r.id, r.name, r.path, r.http_method, r.description ORDER BY r.id";
+        String sql = base + where + tail;
+        return jdbcTemplate.query(sql, params, endpointMapper);
     }
 
     public ApiEndpointView getEndpointWithStats(long id) {
         String sql = "SELECT r.id, r.name, r.path, r.http_method, r.description, " +
+                "r.ping_interval_sec, r.active_monitor, r.last_check_time, r.last_check_status, r.last_check_success, r.last_check_body, " +
                 "COALESCE(COUNT(l.id),0) AS total_calls, " +
                 "COALESCE(SUM(CASE WHEN l.success THEN 1 ELSE 0 END),0) AS success_calls, " +
                 "COALESCE(SUM(CASE WHEN NOT l.success THEN 1 ELSE 0 END),0) AS failure_calls, " +
@@ -110,6 +124,12 @@ public class ApiHealthRepository {
             v.setPath(rs.getString("path"));
             v.setMethod(rs.getString("http_method"));
             v.setDescription(rs.getString("description"));
+            v.setPingIntervalSec((Integer) rs.getObject("ping_interval_sec"));
+            v.setActiveMonitor((Boolean) rs.getObject("active_monitor"));
+            v.setLastCheckTime(rs.getTimestamp("last_check_time") != null ? rs.getTimestamp("last_check_time").toInstant().atOffset(java.time.ZoneOffset.UTC) : null);
+            v.setLastCheckStatus((Integer) rs.getObject("last_check_status"));
+            v.setLastCheckSuccess((Boolean) rs.getObject("last_check_success"));
+            v.setLastCheckBody(rs.getString("last_check_body"));
             v.setTotalCalls(rs.getLong("total_calls"));
             v.setSuccessCalls(rs.getLong("success_calls"));
             v.setFailureCalls(rs.getLong("failure_calls"));
@@ -134,4 +154,20 @@ public class ApiHealthRepository {
             return v;
         }
     };
+
+    public List<ApiEndpointView> endpointsNeedingPing(long nowEpochSeconds) {
+        String sql = "SELECT r.id, r.name, r.path, r.http_method, r.description, " +
+                "r.ping_interval_sec, r.active_monitor, r.last_check_time, r.last_check_status, r.last_check_success, r.last_check_body, " +
+                "0 AS total_calls, 0 AS success_calls, 0 AS failure_calls, 0 AS avg_duration_ms, r.last_check_time AS last_called " +
+                "FROM " + schema + ".api_endpoint_registry r " +
+                "WHERE r.active_monitor = TRUE AND r.ping_interval_sec > 0 " +
+                "AND (r.last_check_time IS NULL OR UNIX_TIMESTAMP(r.last_check_time) <= ? - r.ping_interval_sec)";
+        return jdbcTemplate.query(sql, endpointMapper, nowEpochSeconds);
+    }
+
+    public void updateMonitorStatus(long id, int status, boolean success, String body, OffsetDateTime checkedAt) {
+        jdbcTemplate.update("UPDATE " + schema + ".api_endpoint_registry SET " +
+                        "last_check_status=?, last_check_success=?, last_check_body=?, last_check_time=? WHERE id=?",
+                status, success, body, checkedAt, id);
+    }
 }

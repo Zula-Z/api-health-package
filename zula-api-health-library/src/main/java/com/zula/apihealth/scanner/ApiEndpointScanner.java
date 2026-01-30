@@ -1,6 +1,7 @@
 package com.zula.apihealth.scanner;
 
 import com.zula.apihealth.annotation.TrackApiEndpoint;
+import com.zula.apihealth.annotation.EndpointMonitor;
 import com.zula.apihealth.repository.ApiHealthRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,13 +47,20 @@ public class ApiEndpointScanner implements BeanPostProcessor {
                     ? environment.resolvePlaceholders(rawPath)
                     : rawPath;
 
+            EndpointMonitor monitor = AnnotatedElementUtils.findMergedAnnotation(method, EndpointMonitor.class);
+            Integer pingInterval = monitor != null ? monitor.pingIntervalSeconds() : 0;
+            Boolean active = monitor != null && monitor.active();
+
             repository.registerEndpointIfAbsent(
                     ann.name(),
                     resolvedPath,
                     ann.method(),
-                    ann.description()
+                    ann.description(),
+                    pingInterval,
+                    active
             );
-            log.info("Registered tracked API endpoint {} {} ({})", ann.method(), resolvedPath, beanName + "#" + method.getName());
+            log.info("Registered tracked API endpoint {} {} ({}) monitor active={} intervalSec={}",
+                    ann.method(), resolvedPath, beanName + "#" + method.getName(), active, pingInterval);
         });
 
         return bean;

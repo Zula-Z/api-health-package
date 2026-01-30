@@ -13,6 +13,12 @@ public class ApiEndpointView {
     private Long failureCalls;
     private Double avgDurationMs;
     private OffsetDateTime lastCalled;
+    private Integer pingIntervalSec;
+    private Boolean activeMonitor;
+    private OffsetDateTime lastCheckTime;
+    private Integer lastCheckStatus;
+    private Boolean lastCheckSuccess;
+    private String lastCheckBody;
 
     // getters and setters
     public Long getId() { return id; }
@@ -44,4 +50,22 @@ public class ApiEndpointView {
 
     public OffsetDateTime getLastCalled() { return lastCalled; }
     public void setLastCalled(OffsetDateTime lastCalled) { this.lastCalled = lastCalled; }
+
+    public Integer getPingIntervalSec() { return pingIntervalSec; }
+    public void setPingIntervalSec(Integer pingIntervalSec) { this.pingIntervalSec = pingIntervalSec; }
+
+    public Boolean getActiveMonitor() { return activeMonitor; }
+    public void setActiveMonitor(Boolean activeMonitor) { this.activeMonitor = activeMonitor; }
+
+    public OffsetDateTime getLastCheckTime() { return lastCheckTime; }
+    public void setLastCheckTime(OffsetDateTime lastCheckTime) { this.lastCheckTime = lastCheckTime; }
+
+    public Integer getLastCheckStatus() { return lastCheckStatus; }
+    public void setLastCheckStatus(Integer lastCheckStatus) { this.lastCheckStatus = lastCheckStatus; }
+
+    public Boolean getLastCheckSuccess() { return lastCheckSuccess; }
+    public void setLastCheckSuccess(Boolean lastCheckSuccess) { this.lastCheckSuccess = lastCheckSuccess; }
+
+    public String getLastCheckBody() { return lastCheckBody; }
+    public void setLastCheckBody(String lastCheckBody) { this.lastCheckBody = lastCheckBody; }
 }

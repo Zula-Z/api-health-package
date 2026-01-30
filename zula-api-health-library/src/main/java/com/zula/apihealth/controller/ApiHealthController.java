@@ -18,8 +18,8 @@ public class ApiHealthController {
     }
 
     @GetMapping("/endpoints")
-    public List<ApiEndpointView> endpoints() {
-        return service.listEndpoints();
+    public List<ApiEndpointView> endpoints(@RequestParam(name = "filter", required = false) String filter) {
+        return service.listEndpoints(filter);
     }
 
     @GetMapping("/endpoints/{id}")

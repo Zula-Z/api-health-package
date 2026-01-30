@@ -54,9 +54,34 @@ public class ApiHealthSchemaInitializer implements InitializingBean {
                 "path TEXT NOT NULL," +
                 "http_method VARCHAR(10) NOT NULL," +
                 "description TEXT," +
+                "ping_interval_sec INT DEFAULT 0," +
+                "active_monitor BOOLEAN DEFAULT FALSE," +
+                "last_check_time DATETIME NULL," +
+                "last_check_status INT NULL," +
+                "last_check_success BOOLEAN NULL," +
+                "last_check_body TEXT NULL," +
                 "created_at DATETIME DEFAULT CURRENT_TIMESTAMP," +
                 "UNIQUE(path(255), http_method)" +
                 ")");
+
+        // Best-effort schema evolution for existing installs that predate new columns
+        addColumnIfMissing(schema, "api_endpoint_registry", "ping_interval_sec INT DEFAULT 0");
+        addColumnIfMissing(schema, "api_endpoint_registry", "active_monitor BOOLEAN DEFAULT FALSE");
+        addColumnIfMissing(schema, "api_endpoint_registry", "last_check_time DATETIME NULL");
+        addColumnIfMissing(schema, "api_endpoint_registry", "last_check_status INT NULL");
+        addColumnIfMissing(schema, "api_endpoint_registry", "last_check_success BOOLEAN NULL");
+        addColumnIfMissing(schema, "api_endpoint_registry", "last_check_body TEXT NULL");
+    }
+
+    private void addColumnIfMissing(String schema, String table, String columnDef) {
+        String sql = "ALTER TABLE " + schema + "." + table + " ADD COLUMN " + columnDef;
+        try {
+            jdbcTemplate.execute(sql);
+            log.info("Added column {} to {}.{}", columnDef.split(\" \")[0], schema, table);
+        } catch (Exception e) {
+            // Column likely exists; swallow to stay non-breaking
+            log.debug(\"Column add skipped for {}.{} -> {} : {}\", schema, table, columnDef, e.getMessage());
+        }
     }
 
     public String resolveSchema() {
