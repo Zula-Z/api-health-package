@@ -15,6 +15,7 @@ import org.springframework.web.client.RestTemplate;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.net.URI;
 
 /**
  * Active pinging of external endpoints marked with {@code @EndpointMonitor(active=true)}.
@@ -46,9 +47,10 @@ public class PingScheduler {
         for (ApiEndpointView endpoint : targets) {
             HttpHeaders headers = new HttpHeaders();
             HttpEntity<Void> entity = new HttpEntity<>(headers);
+            URI uri = URI.create(endpoint.getPath());
             // HEAD first
             try {
-                ResponseEntity<String> resp = restTemplate.exchange(endpoint.getPath(), HttpMethod.HEAD, entity, String.class);
+                ResponseEntity<String> resp = restTemplate.exchange(uri, HttpMethod.HEAD, entity, String.class);
                 int status = resp.getStatusCodeValue();
                 service.updateMonitorStatus(endpoint.getId(), status, service.isUp(status), null, now);
                 log.info("Pinged(HEAD) {} -> status {}", endpoint.getPath(), status);
@@ -64,7 +66,7 @@ public class PingScheduler {
             }
             // GET fallback
             try {
-                ResponseEntity<String> resp = restTemplate.exchange(endpoint.getPath(), HttpMethod.GET, entity, String.class);
+                ResponseEntity<String> resp = restTemplate.exchange(uri, HttpMethod.GET, entity, String.class);
                 int status = resp.getStatusCodeValue();
                 String body = resp.getBody();
                 service.updateMonitorStatus(endpoint.getId(), status, service.isUp(status), truncate(body), now);
