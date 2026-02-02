@@ -5,6 +5,7 @@ import com.zula.apihealth.model.ApiCallLogEntry;
 import com.zula.apihealth.model.ApiEndpointView;
 import com.zula.apihealth.model.ApiLogView;
 import com.zula.apihealth.repository.ApiHealthRepository;
+import com.zula.apihealth.service.StatusClassifier;
 
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -15,10 +16,12 @@ import java.util.List;
 public class ApiHealthService {
     private final ApiHealthRepository repository;
     private final ApiHealthProperties properties;
+    private final StatusClassifier classifier;
 
     public ApiHealthService(ApiHealthRepository repository, ApiHealthProperties properties) {
         this.repository = repository;
         this.properties = properties;
+        this.classifier = new StatusClassifier(); // uses status-ranges.txt bundled with the library
     }
 
     /** Return all endpoints with aggregated stats; optional filter/date/sort/status and active switch. */
@@ -66,7 +69,7 @@ public class ApiHealthService {
         repository.insertLog(entry);
         // Also refresh monitor metadata based on this real call, even if active_monitor=false
         if (entry.getHttpStatus() != null) {
-            boolean ok = entry.getHttpStatus() >= 200 && entry.getHttpStatus() < 400;
+            boolean ok = classifier.isUp(entry.getHttpStatus());
             repository.updateMonitorStatusByUrl(entry.getUrl(), entry.getHttpMethod(), entry.getHttpStatus(), ok, entry.getResponseBody(), entry.getTimestamp());
         }
     }
@@ -91,5 +94,10 @@ public class ApiHealthService {
     /** Store the result of a monitor ping. */
     public void updateMonitorStatus(long id, int status, boolean success, String body, OffsetDateTime checkedAt) {
         repository.updateMonitorStatus(id, status, success, body, checkedAt);
+    }
+
+    /** Centralized up/down decision so scheduler and interceptor share the same rules. */
+    public boolean isUp(int status) {
+        return classifier.isUp(status);
     }
 }

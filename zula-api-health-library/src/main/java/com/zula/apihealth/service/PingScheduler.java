@@ -3,6 +3,9 @@ package com.zula.apihealth.service;
 import com.zula.apihealth.model.ApiEndpointView;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.web.client.RestClientException;
@@ -41,10 +44,17 @@ public class PingScheduler {
         log.debug("PingScheduler: will ping {} endpoint(s)", targets.size());
         for (ApiEndpointView endpoint : targets) {
             try {
-                ResponseEntity<String> resp = restTemplate.getForEntity(endpoint.getPath(), String.class);
+                HttpHeaders headers = new HttpHeaders();
+                HttpEntity<Void> entity = new HttpEntity<>(headers);
+                ResponseEntity<String> resp;
+                try {
+                    resp = restTemplate.exchange(endpoint.getPath(), HttpMethod.HEAD, entity, String.class);
+                } catch (RestClientException headEx) {
+                    resp = restTemplate.exchange(endpoint.getPath(), HttpMethod.GET, entity, String.class);
+                }
                 int status = resp.getStatusCodeValue();
                 String body = resp.getBody();
-                service.updateMonitorStatus(endpoint.getId(), status, status < 500, truncate(body), now);
+                service.updateMonitorStatus(endpoint.getId(), status, service.isUp(status), truncate(body), now);
                 log.info("Pinged {} -> status {}", endpoint.getPath(), status);
             } catch (RestClientException ex) {
                 service.updateMonitorStatus(endpoint.getId(), 0, false, ex.getMessage(), now);
