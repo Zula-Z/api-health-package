@@ -1,6 +1,7 @@
 package com.zula.apihealth.service;
 
 import com.zula.apihealth.model.ApiEndpointView;
+import com.zula.apihealth.interceptor.PingContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpEntity;
@@ -45,40 +46,45 @@ public class PingScheduler {
         OffsetDateTime now = OffsetDateTime.now(ZONE_NAIROBI);
         log.debug("PingScheduler: will ping {} endpoint(s)", targets.size());
         for (ApiEndpointView endpoint : targets) {
-            HttpHeaders headers = new HttpHeaders();
-            HttpEntity<Void> entity = new HttpEntity<>(headers);
-            URI uri = URI.create(endpoint.getPath());
-            // HEAD first
+            PingContext.markPing();
             try {
-                ResponseEntity<String> resp = restTemplate.exchange(uri, HttpMethod.HEAD, entity, String.class);
-                int status = resp.getStatusCodeValue();
-                service.updateMonitorStatus(endpoint.getId(), status, service.isUp(status), null, now);
-                log.info("Pinged(HEAD) {} -> status {}", endpoint.getPath(), status);
-                continue;
-            } catch (RestClientResponseException headResp) {
-                int status = headResp.getRawStatusCode();
-                String body = headResp.getResponseBodyAsString();
-                service.updateMonitorStatus(endpoint.getId(), status, service.isUp(status), truncate(body), now);
-                log.info("Pinged(HEAD) {} -> status {} (error handled)", endpoint.getPath(), status);
-                continue;
-            } catch (RestClientException headConn) {
-                log.debug("HEAD failed for {} -> {}, trying GET", endpoint.getPath(), headConn.getMessage());
-            }
-            // GET fallback
-            try {
-                ResponseEntity<String> resp = restTemplate.exchange(uri, HttpMethod.GET, entity, String.class);
-                int status = resp.getStatusCodeValue();
-                String body = resp.getBody();
-                service.updateMonitorStatus(endpoint.getId(), status, service.isUp(status), truncate(body), now);
-                log.info("Pinged(GET) {} -> status {}", endpoint.getPath(), status);
-            } catch (RestClientResponseException getResp) {
-                int status = getResp.getRawStatusCode();
-                String body = getResp.getResponseBodyAsString();
-                service.updateMonitorStatus(endpoint.getId(), status, service.isUp(status), truncate(body), now);
-                log.info("Pinged(GET) {} -> status {} (error handled)", endpoint.getPath(), status);
-            } catch (RestClientException ex) {
-                service.updateMonitorStatus(endpoint.getId(), 0, false, ex.getMessage(), now);
-                log.warn("Ping failed for {}: {}", endpoint.getPath(), ex.getMessage());
+                HttpHeaders headers = new HttpHeaders();
+                HttpEntity<Void> entity = new HttpEntity<>(headers);
+                URI uri = URI.create(endpoint.getPath());
+                // HEAD first
+                try {
+                    ResponseEntity<String> resp = restTemplate.exchange(uri, HttpMethod.HEAD, entity, String.class);
+                    int status = resp.getStatusCodeValue();
+                    service.updateMonitorStatus(endpoint.getId(), status, service.isUp(status), null, now);
+                    log.info("Pinged(HEAD) {} -> status {}", endpoint.getPath(), status);
+                    continue;
+                } catch (RestClientResponseException headResp) {
+                    int status = headResp.getRawStatusCode();
+                    String body = headResp.getResponseBodyAsString();
+                    service.updateMonitorStatus(endpoint.getId(), status, service.isUp(status), truncate(body), now);
+                    log.info("Pinged(HEAD) {} -> status {} (error handled)", endpoint.getPath(), status);
+                    continue;
+                } catch (RestClientException headConn) {
+                    log.debug("HEAD failed for {} -> {}, trying GET", endpoint.getPath(), headConn.getMessage());
+                }
+                // GET fallback
+                try {
+                    ResponseEntity<String> resp = restTemplate.exchange(uri, HttpMethod.GET, entity, String.class);
+                    int status = resp.getStatusCodeValue();
+                    String body = resp.getBody();
+                    service.updateMonitorStatus(endpoint.getId(), status, service.isUp(status), truncate(body), now);
+                    log.info("Pinged(GET) {} -> status {}", endpoint.getPath(), status);
+                } catch (RestClientResponseException getResp) {
+                    int status = getResp.getRawStatusCode();
+                    String body = getResp.getResponseBodyAsString();
+                    service.updateMonitorStatus(endpoint.getId(), status, service.isUp(status), truncate(body), now);
+                    log.info("Pinged(GET) {} -> status {} (error handled)", endpoint.getPath(), status);
+                } catch (RestClientException ex) {
+                    service.updateMonitorStatus(endpoint.getId(), 0, false, ex.getMessage(), now);
+                    log.warn("Ping failed for {}: {}", endpoint.getPath(), ex.getMessage());
+                }
+            } finally {
+                PingContext.clear();
             }
         }
     }
