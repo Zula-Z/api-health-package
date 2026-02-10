@@ -1,5 +1,6 @@
 package com.zula.apihealth.controller;
 
+import com.zula.apihealth.model.ApiLogDetailView;
 import com.zula.apihealth.model.ApiLogView;
 import com.zula.apihealth.service.ApiHealthService;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -15,7 +16,7 @@ import java.util.List;
  * Note: some handlers derive subsets in-memory for simplicity.
  */
 @RestController
-@RequestMapping("/api/logs")
+@RequestMapping("/admin/logs")
 public class ApiCallLogController {
 
     private final ApiHealthService service;
@@ -43,9 +44,9 @@ public class ApiCallLogController {
     }
 
     @GetMapping("/trace/{traceId}")
-    /** Logs matching a specific traceId (derived). */
-    public List<ApiLogView> getByTraceId(@PathVariable String traceId) {
-        return service.logsByEndpoint("", 1000).stream().filter(l -> traceId.equals(l.getTraceId())).toList();
+    /** Detailed logs matching a specific traceId (includes request/response headers and bodies). */
+    public List<ApiLogDetailView> getByTraceId(@PathVariable String traceId) {
+        return service.logDetailsByTraceId(traceId, 1000);
     }
 
     @GetMapping("/stats/avg-duration")

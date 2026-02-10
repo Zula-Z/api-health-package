@@ -3,6 +3,7 @@ package com.zula.apihealth.service;
 import com.zula.apihealth.config.ApiHealthProperties;
 import com.zula.apihealth.model.ApiCallLogEntry;
 import com.zula.apihealth.model.ApiEndpointView;
+import com.zula.apihealth.model.ApiLogDetailView;
 import com.zula.apihealth.model.ApiLogView;
 import com.zula.apihealth.repository.ApiHealthRepository;
 import com.zula.apihealth.service.StatusClassifier;
@@ -45,6 +46,12 @@ public class ApiHealthService {
     public List<ApiLogView> logsByEndpoint(String url, Integer limit) {
         int l = limit != null ? limit : properties.getRecentLimit();
         return repository.logsByEndpoint(url, l);
+    }
+
+    /** Detailed logs filtered by trace id (includes request/response headers and bodies). */
+    public List<ApiLogDetailView> logDetailsByTraceId(String traceId, Integer limit) {
+        int l = limit != null ? limit : 1000;
+        return repository.logDetailsByTraceId(traceId, l);
     }
 
     /** Health view for all endpoints (both actively monitored and passive). */

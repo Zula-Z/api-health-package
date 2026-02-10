@@ -3,6 +3,7 @@ package com.zula.apihealth.repository;
 import com.zula.apihealth.config.ApiHealthProperties;
 import com.zula.apihealth.model.ApiCallLogEntry;
 import com.zula.apihealth.model.ApiEndpointView;
+import com.zula.apihealth.model.ApiLogDetailView;
 import com.zula.apihealth.model.ApiLogView;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -132,6 +133,14 @@ public class ApiHealthRepository {
         return jdbcTemplate.query(sql, logMapper, endpointLike, limit);
     }
 
+    /** Detailed logs filtered by trace id (includes request/response headers and bodies). */
+    public List<ApiLogDetailView> logDetailsByTraceId(String traceId, int limit) {
+        String sql = "SELECT id, timestamp, url, http_method, request_headers, request_body, response_headers, response_body, " +
+                "http_status, duration_ms, success, trace_id " +
+                "FROM " + schema + ".api_call_logs WHERE trace_id = ? ORDER BY timestamp DESC LIMIT ?";
+        return jdbcTemplate.query(sql, logDetailMapper, traceId, limit);
+    }
+
     /** Logs tied to an endpoint by matching URL prefix via endpoint id. */
     public List<ApiLogView> logsForEndpointId(long endpointId, int limit) {
         String sql = "SELECT l.id, l.timestamp, l.url, l.http_method, l.http_status, l.duration_ms, l.success, l.trace_id " +
@@ -204,6 +213,26 @@ public class ApiHealthRepository {
             v.setTimestamp(rs.getTimestamp("timestamp").toInstant().atZone(zone).toOffsetDateTime());
             v.setUrl(rs.getString("url"));
             v.setHttpMethod(rs.getString("http_method"));
+            v.setHttpStatus(rs.getObject("http_status") == null ? null : rs.getInt("http_status"));
+            v.setDurationMs(rs.getObject("duration_ms") == null ? null : rs.getInt("duration_ms"));
+            v.setSuccess(rs.getObject("success") == null ? null : rs.getBoolean("success"));
+            v.setTraceId(rs.getString("trace_id"));
+            return v;
+        }
+    };
+
+    private final RowMapper<ApiLogDetailView> logDetailMapper = new RowMapper<ApiLogDetailView>() {
+        @Override
+        public ApiLogDetailView mapRow(ResultSet rs, int rowNum) throws SQLException {
+            ApiLogDetailView v = new ApiLogDetailView();
+            v.setId(UUID.fromString(rs.getString("id")));
+            v.setTimestamp(rs.getTimestamp("timestamp").toInstant().atZone(zone).toOffsetDateTime());
+            v.setUrl(rs.getString("url"));
+            v.setHttpMethod(rs.getString("http_method"));
+            v.setRequestHeaders(rs.getString("request_headers"));
+            v.setRequestBody(rs.getString("request_body"));
+            v.setResponseHeaders(rs.getString("response_headers"));
+            v.setResponseBody(rs.getString("response_body"));
             v.setHttpStatus(rs.getObject("http_status") == null ? null : rs.getInt("http_status"));
             v.setDurationMs(rs.getObject("duration_ms") == null ? null : rs.getInt("duration_ms"));
             v.setSuccess(rs.getObject("success") == null ? null : rs.getBoolean("success"));
