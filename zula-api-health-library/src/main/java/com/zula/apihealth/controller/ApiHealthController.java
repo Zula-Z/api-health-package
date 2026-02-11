@@ -15,7 +15,7 @@ import java.util.List;
  * REST endpoints to query registered external APIs, their logs, and monitoring status.
  */
 @RestController
-@RequestMapping("/api/health")
+@RequestMapping("/admin/health")
 @Slf4j
 public class ApiHealthController {
     private final ApiHealthService service;
